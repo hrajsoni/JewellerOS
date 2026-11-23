@@ -7,31 +7,69 @@ export type JewelleryCategory =
   | "Necklaces & Sets"
   | "Earrings & Jhumkas"
   | "Mangalsutras"
+  | "Pendants"
   | "Coins & Bullion"
   | "Silver Articles & Payal"
   | "Other";
 
-export type StockStatus = "in_showcase" | "in_vault" | "sold" | "workshop_repair";
+export type StockStatus =
+  | "in_showcase"
+  | "in_vault"
+  | "with_karigar"
+  | "in_repair"
+  | "reserved"
+  | "sold"
+  | "damaged"
+  | "returned_to_supplier";
 
 export interface StockItem {
   id: string;
   sku: string; // e.g. "CHN-18K-084"
-  barcode?: string;
+  barcode: string; // Printable Code 128 barcode number, e.g. "8901840001"
   name: string;
   category: JewelleryCategory;
   metal: "gold" | "silver";
   purity: GoldPurityKey | SilverPurityKey;
   purityDisplay: string;
-  grossWeight: number; // in grams
-  stoneWeight: number; // in grams
-  netWeight: number;   // billable weight in grams
-  acquisitionCost: number; // what the shop paid wholesale
+  
+  // Exact Milligram Weight Accounting
+  grossWeight: number; // in grams (e.g. 10.234)
+  stoneWeight: number; // in grams (e.g. 0.400)
+  otherDeductions?: number; // wax, enamel, dori/thread in grams
+  netWeight: number;   // gross - stone - other deductions in grams
+  fineWeight?: number; // Tunch equivalent fine weight in grams
+  
+  // Diamond & Gemstone Specifics
+  diamondCarats?: number;
+  diamondPieces?: number;
+  diamondClarity?: string; // e.g. "VVS-EF", "VS-GH"
+  
+  // Commercial & Tray
+  hsnCode?: string; // Standard "7113" for articles of jewellery
+  acquisitionCost: number; // Wholesale purchase cost (strictly hidden from sales staff)
   defaultMakingType: "percentage" | "per_gram" | "fixed";
   defaultMakingValue: number;
-  trayLocation: string; // e.g. "Tray #4 · Main Counter"
+  trayLocation: string; // e.g. "Tray #2 · Chains Display", "Safe Vault #1"
   supplierName?: string;
   status: StockStatus;
   dateAdded: string;
+  notes?: string;
+}
+
+export interface StockMovementRecord {
+  id: string;
+  stockItemId: string;
+  sku: string;
+  productName: string;
+  fromStatus: StockStatus;
+  toStatus: StockStatus;
+  fromLocation?: string;
+  toLocation?: string;
+  reason: string;
+  timestamp: string;
+  performedById: string;
+  performedByName: string;
+  performedByRole: string;
 }
 
 export interface Supplier {

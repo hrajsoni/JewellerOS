@@ -39,7 +39,7 @@ import {
 import { formatINR } from "../lib/formatters";
 import { InventoryManager } from "../components/inventory/InventoryManager";
 import { StockItem } from "../modules/inventory/types";
-import { getSavedStock, saveStockItems } from "../modules/inventory/store";
+import { getSavedStock, saveStockItems, updateStockItemStatus } from "../modules/inventory/store";
 import { CustomerLedger } from "../components/customers/CustomerLedger";
 import { Customer, NewCustomerInput } from "../modules/customers/types";
 import {
@@ -766,8 +766,20 @@ function WorkspaceMain() {
             <InventoryManager
               stockItems={stockItems}
               onAddStockItem={handleAddStockItem}
+              onBulkImportStockItems={(newItems) => {
+                const updated = [...newItems, ...stockItems];
+                setStockItems(updated);
+                saveStockItems(updated, activeTenant.id);
+              }}
+              onUpdateStockItemStatus={(stockItemId, newStatus, reason, newLocation) => {
+                const res = updateStockItemStatus(stockItemId, newStatus, reason, user, newLocation, activeTenant.id);
+                if (res) {
+                  setStockItems(res.updatedItems);
+                }
+              }}
               onLoadIntoCalculator={handleLoadStockIntoCalculator}
               currentGoldRate={goldRate}
+              shopName={activeTenant.businessName}
             />
           )}
 

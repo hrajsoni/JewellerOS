@@ -30,10 +30,10 @@
 * **Target State**: Scheduled cron fetch from MCX/IBJA bullion APIs and branch rate overrides.
 * **Status**: 🟢 **Completed & Integrated (Milestone 2)**
 
-### 🟡 Module 4: Inventory & Stock Management
-* **Current State**: `InventoryManager.tsx` with category filters, barcode display, gross/net weight, stone deduction, tray locations, and load-into-calculator capability.
-* **Target State**: Relational Product Master vs Individual Stock Item architecture; barcode label printing; Excel bulk import; immutable `stock_movements` ledger; physical stock audit scanner.
-* **Status**: 🟡 **Interactive Prototype** $\rightarrow$ *Target: Milestone 3*
+### 🟢 Module 4: Inventory & Stock Management
+* **Current State**: Serialized Physical Stock Item architecture with milligram gross/net/stone/other (lac, wax, enamel) weight accounting. Built-in zero-dependency Code 128 vector barcode generator (`barcode.ts`), printable jewellery thermal tag labels (`JewelleryBarcodeTag.tsx`), USB/Bluetooth Barcode Scanner Gun quick search bar, bulk Excel/CSV spreadsheet ingestion modal (`BulkStockImportModal.tsx`), and immutable stock movement audit ledger (`StockMovementModal.tsx`).
+* **Target State**: RFID tag scanner integration and warehouse physical audit count discrepancies.
+* **Status**: 🟢 **Completed & Integrated (Milestone 3)**
 
 ### 🟢 Module 5: Billing & POS (Point of Sale)
 * **Current State**: Ultra-polished `CounterCalculator.tsx`, `CounterQuickCartDrawer.tsx`, `BillingWorkspace.tsx`, and `TaxInvoiceModal.tsx`. 1-click round-off, WhatsApp quotation, split payments (Cash/UPI/Card), GST tax breakdown, and thermal receipt print.

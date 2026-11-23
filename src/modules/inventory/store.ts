@@ -1,6 +1,8 @@
-import { StockItem, Supplier } from "./types";
+import { StockItem, Supplier, StockMovementRecord, StockStatus, JewelleryCategory } from "./types";
+import { UserSession } from "../auth/types";
 
-const INVENTORY_STORAGE_KEY = "jewellery_os_inventory_v2";
+const INVENTORY_STORAGE_KEY = "jewellery_os_inventory_v3";
+const MOVEMENTS_STORAGE_KEY = "jewellery_os_stock_movements_v1";
 
 export const INITIAL_STOCK_ITEMS: StockItem[] = [
   {
@@ -12,9 +14,12 @@ export const INITIAL_STOCK_ITEMS: StockItem[] = [
     metal: "gold",
     purity: "18K",
     purityDisplay: "18K (75%)",
-    grossWeight: 10.0,
+    grossWeight: 10.234,
     stoneWeight: 0,
-    netWeight: 10.0,
+    otherDeductions: 0,
+    netWeight: 10.234,
+    fineWeight: 7.675,
+    hsnCode: "7113",
     acquisitionCost: 112500,
     defaultMakingType: "percentage",
     defaultMakingValue: 18,
@@ -32,9 +37,12 @@ export const INITIAL_STOCK_ITEMS: StockItem[] = [
     metal: "gold",
     purity: "22K",
     purityDisplay: "22K (22/24)",
-    grossWeight: 18.45,
+    grossWeight: 18.450,
     stoneWeight: 0,
-    netWeight: 18.45,
+    otherDeductions: 0,
+    netWeight: 18.450,
+    fineWeight: 16.912,
+    hsnCode: "7113",
     acquisitionCost: 245000,
     defaultMakingType: "percentage",
     defaultMakingValue: 18,
@@ -47,14 +55,20 @@ export const INITIAL_STOCK_ITEMS: StockItem[] = [
     id: "stock-3",
     sku: "RNG-18K-045",
     barcode: "8901840003",
-    name: "18K Diamond Studded Solitaire Ring",
+    name: "18K Diamond Solitaire Ring",
     category: "Rings",
     metal: "gold",
     purity: "18K",
     purityDisplay: "18K (75%)",
-    grossWeight: 4.25,
-    stoneWeight: 0.4,
-    netWeight: 3.85,
+    grossWeight: 4.250,
+    stoneWeight: 0.400,
+    otherDeductions: 0,
+    netWeight: 3.850,
+    fineWeight: 2.887,
+    diamondCarats: 0.35,
+    diamondPieces: 1,
+    diamondClarity: "VVS-EF",
+    hsnCode: "7113",
     acquisitionCost: 48000,
     defaultMakingType: "percentage",
     defaultMakingValue: 20,
@@ -72,9 +86,12 @@ export const INITIAL_STOCK_ITEMS: StockItem[] = [
     metal: "gold",
     purity: "22K",
     purityDisplay: "22K (22/24)",
-    grossWeight: 45.2,
-    stoneWeight: 2.1,
-    netWeight: 43.1,
+    grossWeight: 48.200,
+    stoneWeight: 2.100,
+    otherDeductions: 3.000, // Lac & Enamel
+    netWeight: 43.100,
+    fineWeight: 39.508,
+    hsnCode: "7113",
     acquisitionCost: 560000,
     defaultMakingType: "percentage",
     defaultMakingValue: 16,
@@ -92,9 +109,12 @@ export const INITIAL_STOCK_ITEMS: StockItem[] = [
     metal: "silver",
     purity: "925",
     purityDisplay: "925 Sterling",
-    grossWeight: 65.5,
+    grossWeight: 65.500,
     stoneWeight: 0,
-    netWeight: 65.5,
+    otherDeductions: 0,
+    netWeight: 65.500,
+    fineWeight: 60.587,
+    hsnCode: "7113",
     acquisitionCost: 5500,
     defaultMakingType: "per_gram",
     defaultMakingValue: 25,
@@ -112,9 +132,12 @@ export const INITIAL_STOCK_ITEMS: StockItem[] = [
     metal: "gold",
     purity: "24K",
     purityDisplay: "24K (100%)",
-    grossWeight: 10.0,
+    grossWeight: 10.000,
     stoneWeight: 0,
-    netWeight: 10.0,
+    otherDeductions: 0,
+    netWeight: 10.000,
+    fineWeight: 10.000,
+    hsnCode: "7113",
     acquisitionCost: 148500,
     defaultMakingType: "percentage",
     defaultMakingValue: 3,
@@ -122,6 +145,39 @@ export const INITIAL_STOCK_ITEMS: StockItem[] = [
     supplierName: "MMTC-PAMP India",
     status: "in_vault",
     dateAdded: "2026-09-26",
+  },
+];
+
+export const INITIAL_STOCK_MOVEMENTS: StockMovementRecord[] = [
+  {
+    id: "mvt-1",
+    stockItemId: "stock-4",
+    sku: "NCK-22K-029",
+    productName: "22K Royal Rajputana Bridal Set",
+    fromStatus: "in_showcase",
+    toStatus: "in_vault",
+    fromLocation: "Showcase Shelf #1",
+    toLocation: "Vault Safe #A",
+    reason: "Evening Showroom Vault Deposit",
+    timestamp: "2026-11-23T19:00:00.000Z",
+    performedById: "user-vikram-inv",
+    performedByName: "Vikram Soni",
+    performedByRole: "INVENTORY_CLERK",
+  },
+  {
+    id: "mvt-2",
+    stockItemId: "stock-6",
+    sku: "COIN-24K-010",
+    productName: "24K 999 Pure Lakshmi Gold Coin",
+    fromStatus: "in_showcase",
+    toStatus: "in_vault",
+    fromLocation: "Bullion Counter",
+    toLocation: "Vault Safe #B",
+    reason: "Transferred to High Security Safe",
+    timestamp: "2026-11-23T14:30:00.000Z",
+    performedById: "user-sunil-mgr",
+    performedByName: "Sunil Mehta",
+    performedByRole: "MANAGER",
   },
 ];
 
@@ -161,23 +217,27 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
 ];
 
 export function getTenantInventoryStorageKey(tenantId?: string): string {
-  return tenantId ? `jewellery_os_tenant_${tenantId}_inventory` : INVENTORY_STORAGE_KEY;
+  return tenantId ? `jewellery_os_tenant_${tenantId}_inventory_v3` : INVENTORY_STORAGE_KEY;
+}
+
+export function getTenantMovementsStorageKey(tenantId?: string): string {
+  return tenantId ? `jewellery_os_tenant_${tenantId}_movements_v1` : MOVEMENTS_STORAGE_KEY;
 }
 
 export function getSavedStock(tenantId?: string): StockItem[] {
   if (typeof window === "undefined") return INITIAL_STOCK_ITEMS;
   try {
     const key = getTenantInventoryStorageKey(tenantId);
-    let raw = localStorage.getItem(key);
-    if (!raw && tenantId === "tenant-sandhya-jaipur") {
-      raw = localStorage.getItem(getTenantInventoryStorageKey("tenant-soni-jaipur"));
-    }
+    const raw = localStorage.getItem(key);
     if (!raw) {
-      const initial = (!tenantId || tenantId === "tenant-sandhya-jaipur" || tenantId === "tenant-soni-jaipur") ? INITIAL_STOCK_ITEMS : [];
+      const initial = (!tenantId || tenantId === "tenant-sandhya-jaipur" || tenantId === "tenant-soni-jaipur")
+        ? INITIAL_STOCK_ITEMS
+        : [];
       localStorage.setItem(key, JSON.stringify(initial));
       return initial;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STOCK_ITEMS;
   } catch {
     return INITIAL_STOCK_ITEMS;
   }
@@ -191,4 +251,111 @@ export function saveStockItems(items: StockItem[], tenantId?: string): void {
   } catch (err) {
     console.error("Failed to save inventory to storage:", err);
   }
+}
+
+export function getStockMovements(tenantId?: string): StockMovementRecord[] {
+  if (typeof window === "undefined") return INITIAL_STOCK_MOVEMENTS;
+  try {
+    const key = getTenantMovementsStorageKey(tenantId);
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      localStorage.setItem(key, JSON.stringify(INITIAL_STOCK_MOVEMENTS));
+      return INITIAL_STOCK_MOVEMENTS;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : INITIAL_STOCK_MOVEMENTS;
+  } catch {
+    return INITIAL_STOCK_MOVEMENTS;
+  }
+}
+
+export function recordStockMovement(
+  movement: Omit<StockMovementRecord, "id" | "timestamp">,
+  tenantId?: string
+): StockMovementRecord {
+  const newRecord: StockMovementRecord = {
+    ...movement,
+    id: `mvt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      const history = getStockMovements(tenantId);
+      const updated = [newRecord, ...history];
+      localStorage.setItem(getTenantMovementsStorageKey(tenantId), JSON.stringify(updated));
+    } catch (err) {
+      console.error("Failed to persist stock movement:", err);
+    }
+  }
+
+  return newRecord;
+}
+
+export function updateStockItemStatus(
+  stockItemId: string,
+  newStatus: StockStatus,
+  reason: string,
+  user: UserSession,
+  destinationLocation?: string,
+  tenantId?: string
+): { updatedItems: StockItem[]; movement: StockMovementRecord } | null {
+  const items = getSavedStock(tenantId);
+  const target = items.find((i) => i.id === stockItemId);
+  if (!target) return null;
+
+  const oldStatus = target.status;
+  const oldLocation = target.trayLocation;
+  const newLocation = destinationLocation || oldLocation;
+
+  const updatedItems = items.map((i) =>
+    i.id === stockItemId
+      ? { ...i, status: newStatus, trayLocation: newLocation }
+      : i
+  );
+
+  saveStockItems(updatedItems, tenantId);
+
+  const movement = recordStockMovement(
+    {
+      stockItemId: target.id,
+      sku: target.sku,
+      productName: target.name,
+      fromStatus: oldStatus,
+      toStatus: newStatus,
+      fromLocation: oldLocation,
+      toLocation: newLocation,
+      reason,
+      performedById: user.id,
+      performedByName: user.fullName,
+      performedByRole: user.role,
+    },
+    tenantId
+  );
+
+  return { updatedItems, movement };
+}
+
+export function generateBarcodeForIndex(index: number): string {
+  const base = 8900000000;
+  return (base + index).toString();
+}
+
+export function generateSkuForCategory(category: JewelleryCategory, purity: string, sequence: number): string {
+  const prefixMap: Record<JewelleryCategory, string> = {
+    Chains: "CHN",
+    "Bangles & Kadas": "BNG",
+    Rings: "RNG",
+    "Necklaces & Sets": "NCK",
+    "Earrings & Jhumkas": "ERN",
+    Mangalsutras: "MNG",
+    Pendants: "PND",
+    "Coins & Bullion": "COIN",
+    "Silver Articles & Payal": "SLV",
+    Other: "OTH",
+  };
+  const code = prefixMap[category] || "JWL";
+  const purityClean = purity.replace(/[^0-9K]/gi, "").toUpperCase();
+  const seqPadded = sequence.toString().padStart(3, "0");
+  return `${code}-${purityClean}-${seqPadded}`;
 }
