@@ -1,0 +1,590 @@
+# JewelleryOS · Database Schema Design
+
+> **Relational Data Model for High-Integrity Jewellery Enterprise Resource Planning**  
+> Target: PostgreSQL 16+ via Prisma ORM.
+
+---
+
+## 1. Design Conventions & Rules
+
+1. **Precision Currency & Weights**: All financial amounts use `NUMERIC(14, 2)`. All bullion weights (gold, silver, platinum) use `NUMERIC(10, 3)` (milligram precision). Gemstone/diamond carats use `NUMERIC(8, 3)`.
+2. **Tenant Partitioning**: Every core table includes `business_id UUID` indexed with foreign key constraint to `businesses`.
+3. **Audit Immutability**: Critical tables (`invoices`, `payments`, `stock_movements`, `journal_entries`, `karigar_ledger`) have no hard deletion (`DELETE`). Modifications require compensating entries.
+4. **Foreign Key Integrity**: All relational operations utilize `ON DELETE RESTRICT` for financial and inventory assets to prevent orphaned accounting records.
+
+---
+
+## 2. Entity-Relationship Overview
+
+```mermaid
+erDiagram
+    BUSINESS ||--o{ BRANCH : operates
+    BUSINESS ||--o{ USER : employs
+    BUSINESS ||--o{ PRODUCT : catalogs
+    PRODUCT ||--o{ STOCK_ITEM : instances
+    STOCK_ITEM ||--o{ STOCK_MOVEMENT : tracks
+    BUSINESS ||--o{ INVOICE : issues
+    INVOICE ||--o{ INVOICE_ITEM : contains
+    INVOICE ||--o{ PAYMENT : settles
+    STOCK_ITEM ||--o{ INVOICE_ITEM : fulfills
+    BUSINESS ||--o{ CUSTOMER : serves
+    CUSTOMER ||--o{ INVOICE : bills
+    CUSTOMER ||--o{ GIRVI_LOAN : borrows
+    BUSINESS ||--o{ KARIGAR : contracts
+    KARIGAR ||--o{ WORK_ORDER : manufactures
+    KARIGAR ||--o{ METAL_ISSUE : receives_bullion
+    KARIGAR ||--o{ METAL_RETURN : returns_ornament
+    BUSINESS ||--o{ JOURNAL_ENTRY : records
+```
+
+---
+
+## 3. Comprehensive Prisma Schema Definition
+
+```prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// 1. BUSINESS, BRANCHES & RBAC
+// ==========================================
+
+model Business {
+  id              String         @id @default(uuid()) @db.Uuid
+  name            String         @db.VarChar(150)
+  legalEntityName String?        @db.VarChar(150)
+  gstin           String?        @db.VarChar(15)
+  bisLicense      String?        @db.VarChar(50)
+  panNumber       String?        @db.VarChar(10)
+  phone           String         @db.VarChar(20)
+  email           String?        @db.VarChar(100)
+  address         String         @db.Text
+  city            String         @db.VarChar(50)
+  state           String         @db.VarChar(50)
+  pincode         String         @db.VarChar(10)
+  currency        String         @default("INR") @db.VarChar(5)
+  logoUrl         String?        @db.Text
+  createdAt       DateTime       @default(now()) @db.Timestamptz
+  updatedAt       DateTime       @updatedAt @db.Timestamptz
+
+  branches        Branch[]
+  users           User[]
+  products        Product[]
+  stockItems      StockItem[]
+  invoices        Invoice[]
+  customers       Customer[]
+  suppliers       Supplier[]
+  karigars        Karigar[]
+  metalRates      MetalRate[]
+  girviLoans      GirviLoan[]
+  accounts        Account[]
+  journalEntries  JournalEntry[]
+
+  @@map("businesses")
+}
+
+model Branch {
+  id          String      @id @default(uuid()) @db.Uuid
+  businessId  String      @db.Uuid
+  name        String      @db.VarChar(100)
+  code        String      @db.VarChar(10)
+  phone       String?     @db.VarChar(20)
+  address     String?     @db.Text
+  isMainVault Boolean     @default(false)
+  createdAt   DateTime    @default(now()) @db.Timestamptz
+
+  business    Business    @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  stockItems  StockItem[]
+  invoices    Invoice[]
+  users       User[]
+
+  @@unique([businessId, code])
+  @@map("branches")
+}
+
+enum RoleType {
+  OWNER
+  ADMIN
+  MANAGER
+  ACCOUNTANT
+  SALESPERSON
+  INVENTORY_CLERK
+  KARIGAR_MANAGER
+}
+
+model User {
+  id           String      @id @default(uuid()) @db.Uuid
+  businessId   String      @db.Uuid
+  branchId     String?     @db.Uuid
+  fullName     String      @db.VarChar(100)
+  email        String      @unique @db.VarChar(100)
+  phone        String      @db.VarChar(20)
+  passwordHash String      @db.Text
+  role         RoleType    @default(SALESPERSON)
+  isActive     Boolean     @default(true)
+  monthlySalary Decimal?   @db.Decimal(12, 2)
+  advanceBalance Decimal   @default(0) @db.Decimal(12, 2)
+  lastLoginAt  DateTime?   @db.Timestamptz
+  createdAt    DateTime    @default(now()) @db.Timestamptz
+  updatedAt    DateTime    @updatedAt @db.Timestamptz
+
+  business     Business    @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+// ==========================================
+// 2. METAL RATES & VALUATION RULES
+// ==========================================
+
+enum MetalType {
+  GOLD
+  SILVER
+  PLATINUM
+}
+
+model MetalRate {
+  id            String      @id @default(uuid()) @db.Uuid
+  businessId    String      @db.Uuid
+  metal         MetalType
+  purityKey     String      @db.VarChar(10) // 24K, 22K, 18K, 14K, 925
+  purityPercent Decimal     @db.Decimal(6, 4) // e.g. 0.9167 for 22K
+  sellingRate   Decimal     @db.Decimal(12, 2) // Per 10g for Gold, per 1kg for Silver
+  purchaseRate  Decimal     @db.Decimal(12, 2) // Old gold exchange basis
+  effectiveAt   DateTime    @default(now()) @db.Timestamptz
+  updatedById   String?     @db.Uuid
+
+  business      Business    @relation(fields: [businessId], references: [id], onDelete: Restrict)
+
+  @@index([businessId, metal, effectiveAt(sort: Desc)])
+  @@map("metal_rates")
+}
+
+// ==========================================
+// 3. PRODUCT DESIGNS & INDIVIDUAL STOCK ITEMS
+// ==========================================
+
+enum StockStatus {
+  IN_SHOWCASE
+  IN_VAULT
+  RESERVED
+  SOLD
+  WITH_KARIGAR
+  IN_REPAIR
+  DAMAGED
+  RETURNED_TO_SUPPLIER
+}
+
+enum MakingType {
+  PERCENTAGE
+  PER_GRAM
+  FIXED
+}
+
+model Product {
+  id              String      @id @default(uuid()) @db.Uuid
+  businessId      String      @db.Uuid
+  name            String      @db.VarChar(150)
+  category        String      @db.VarChar(50) // Rings, Bangles, Chains, Utensils
+  metal           MetalType
+  defaultPurity   String      @db.VarChar(10)
+  description     String?     @db.Text
+  hsnCode         String      @default("7113") @db.VarChar(10)
+  standardMaking  Decimal?    @db.Decimal(8, 2)
+  makingType      MakingType  @default(PERCENTAGE)
+  imageUrl        String?     @db.Text
+  createdAt       DateTime    @default(now()) @db.Timestamptz
+
+  business        Business    @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  stockItems      StockItem[]
+
+  @@index([businessId, category])
+  @@map("products")
+}
+
+model StockItem {
+  id              String         @id @default(uuid()) @db.Uuid
+  businessId      String         @db.Uuid
+  branchId        String?        @db.Uuid
+  productId       String         @db.Uuid
+  barcode         String         @unique @db.VarChar(50)
+  sku             String         @db.VarChar(50)
+  title           String         @db.VarChar(150)
+  metal           MetalType
+  purityKey       String         @db.VarChar(10)
+  grossWeight     Decimal        @db.Decimal(10, 3)
+  stoneWeight     Decimal        @default(0) @db.Decimal(10, 3)
+  otherDeductions Decimal        @default(0) @db.Decimal(10, 3)
+  netWeight       Decimal        @db.Decimal(10, 3)
+  fineGoldEq      Decimal        @db.Decimal(10, 3)
+  makingType      MakingType     @default(PERCENTAGE)
+  makingValue     Decimal        @db.Decimal(8, 2)
+  acquisitionCost Decimal        @db.Decimal(12, 2)
+  trayLocation    String?        @db.VarChar(50)
+  status          StockStatus    @default(IN_SHOWCASE)
+  supplierId      String?        @db.Uuid
+  dateAcquired    DateTime       @default(now()) @db.Timestamptz
+
+  business        Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  branch          Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  product         Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  movements       StockMovement[]
+  invoiceItems    InvoiceItem[]
+
+  @@index([businessId, status])
+  @@index([businessId, barcode])
+  @@map("stock_items")
+}
+
+model StockMovement {
+  id              String      @id @default(uuid()) @db.Uuid
+  stockItemId     String      @db.Uuid
+  fromStatus      StockStatus
+  toStatus        StockStatus
+  reason          String      @db.VarChar(100) // "Sale Invoice #INV-102", "Transfer to Vault"
+  referenceType   String?     @db.VarChar(50)  // "INVOICE", "PURCHASE", "WORK_ORDER"
+  referenceId     String?     @db.VarChar(100)
+  timestamp       DateTime    @default(now()) @db.Timestamptz
+  performedById   String?     @db.Uuid
+
+  stockItem       StockItem   @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@index([stockItemId, timestamp])
+  @@map("stock_movements")
+}
+
+// ==========================================
+// 4. SALES, POS & BILLING
+// ==========================================
+
+enum InvoiceType {
+  RETAIL_GST
+  WHOLESALE_GST
+  CASH_MEMO
+  ESTIMATE
+  OLD_GOLD_PURCHASE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  FINALIZED
+  CANCELLED
+  REFUNDED
+}
+
+model Invoice {
+  id              String         @id @default(uuid()) @db.Uuid
+  businessId      String         @db.Uuid
+  branchId        String?        @db.Uuid
+  invoiceNumber   String         @db.VarChar(50)
+  type            InvoiceType    @default(RETAIL_GST)
+  status          InvoiceStatus  @default(FINALIZED)
+  invoiceDate     DateTime       @default(now()) @db.Timestamptz
+  customerId      String?        @db.Uuid
+  customerName    String         @db.VarChar(100)
+  customerPhone   String         @db.VarChar(20)
+  customerGstin   String?        @db.VarChar(15)
+  customerCity    String?        @db.VarChar(50)
+  
+  subtotal        Decimal        @db.Decimal(12, 2)
+  makingTotal     Decimal        @db.Decimal(12, 2)
+  discountTotal   Decimal        @default(0) @db.Decimal(12, 2)
+  taxableAmount   Decimal        @db.Decimal(12, 2)
+  cgstAmount      Decimal        @default(0) @db.Decimal(12, 2)
+  sgstAmount      Decimal        @default(0) @db.Decimal(12, 2)
+  igstAmount      Decimal        @default(0) @db.Decimal(12, 2)
+  roundOff        Decimal        @default(0) @db.Decimal(6, 2)
+  grandTotal      Decimal        @db.Decimal(12, 2)
+  oldGoldDeduction Decimal       @default(0) @db.Decimal(12, 2)
+  netPayable      Decimal        @db.Decimal(12, 2)
+  totalPaid       Decimal        @db.Decimal(12, 2)
+  balanceDue      Decimal        @default(0) @db.Decimal(12, 2)
+  createdById     String?        @db.Uuid
+  createdAt       DateTime       @default(now()) @db.Timestamptz
+
+  business        Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  branch          Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer        Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items           InvoiceItem[]
+  payments        Payment[]
+
+  @@unique([businessId, invoiceNumber])
+  @@index([businessId, invoiceDate(sort: Desc)])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id              String      @id @default(uuid()) @db.Uuid
+  invoiceId       String      @db.Uuid
+  stockItemId     String?     @db.Uuid
+  description     String      @db.VarChar(150)
+  metal           MetalType
+  purityKey       String      @db.VarChar(10)
+  grossWeight     Decimal     @db.Decimal(10, 3)
+  netWeight       Decimal     @db.Decimal(10, 3)
+  metalRate       Decimal     @db.Decimal(12, 2)
+  metalValue      Decimal     @db.Decimal(12, 2)
+  makingCharges   Decimal     @db.Decimal(10, 2)
+  stoneValue      Decimal     @default(0) @db.Decimal(10, 2)
+  discount        Decimal     @default(0) @db.Decimal(10, 2)
+  itemSubtotal    Decimal     @db.Decimal(12, 2)
+
+  invoice         Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  stockItem       StockItem?  @relation(fields: [stockItemId], references: [id], onDelete: SetNull)
+
+  @@map("invoice_items")
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+  OLD_GOLD
+  CREDIT
+}
+
+model Payment {
+  id            String         @id @default(uuid()) @db.Uuid
+  invoiceId     String         @db.Uuid
+  method        PaymentMethod
+  amount        Decimal        @db.Decimal(12, 2)
+  referenceNo   String?        @db.VarChar(100) // UPI UTR, Card Txn ID
+  paymentDate   DateTime       @default(now()) @db.Timestamptz
+
+  invoice       Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// ==========================================
+// 5. CUSTOMERS & SUPPLIERS
+// ==========================================
+
+model Customer {
+  id              String         @id @default(uuid()) @db.Uuid
+  businessId      String         @db.Uuid
+  name            String         @db.VarChar(100)
+  phone           String         @db.VarChar(20)
+  email           String?        @db.VarChar(100)
+  city            String         @default("Jaipur") @db.VarChar(50)
+  address         String?        @db.Text
+  gstin           String?        @db.VarChar(15)
+  panNumber       String?        @db.VarChar(10)
+  totalPurchased  Decimal        @default(0) @db.Decimal(12, 2)
+  outstandingDue  Decimal        @default(0) @db.Decimal(12, 2)
+  loyaltyPoints   Int            @default(0)
+  createdAt       DateTime       @default(now()) @db.Timestamptz
+
+  business        Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  invoices        Invoice[]
+  girviLoans      GirviLoan[]
+
+  @@unique([businessId, phone])
+  @@map("customers")
+}
+
+model Supplier {
+  id              String         @id @default(uuid()) @db.Uuid
+  businessId      String         @db.Uuid
+  name            String         @db.VarChar(100)
+  contactPerson   String?        @db.VarChar(100)
+  phone           String         @db.VarChar(20)
+  city            String         @db.VarChar(50)
+  gstin           String?        @db.VarChar(15)
+  metalSupplied   MetalType      @default(GOLD)
+  outstandingDue  Decimal        @default(0) @db.Decimal(12, 2)
+  createdAt       DateTime       @default(now()) @db.Timestamptz
+
+  business        Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  stockItems      StockItem[]
+
+  @@map("suppliers")
+}
+
+// ==========================================
+// 6. KARIGAR & ARTISAN MANUFACTURING
+// ==========================================
+
+model Karigar {
+  id                  String             @id @default(uuid()) @db.Uuid
+  businessId          String             @db.Uuid
+  name                String             @db.VarChar(100)
+  phone               String             @db.VarChar(20)
+  workshopCity        String             @db.VarChar(50)
+  specialty           String             @db.VarChar(100) // Casting, Polki, Plain Gold
+  pureGoldBalanceGrams Decimal           @default(0) @db.Decimal(10, 3)
+  labourBalanceDue    Decimal            @default(0) @db.Decimal(12, 2)
+  status              String             @default("active") @db.VarChar(20)
+  createdAt           DateTime           @default(now()) @db.Timestamptz
+
+  business            Business           @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  metalTransactions   KarigarTransaction[]
+
+  @@map("karigars")
+}
+
+enum KarigarTxnType {
+  ISSUE_METAL
+  RECEIVE_ORNAMENT
+  PAY_LABOUR
+}
+
+model KarigarTransaction {
+  id              String         @id @default(uuid()) @db.Uuid
+  karigarId       String         @db.Uuid
+  type            KarigarTxnType
+  date            DateTime       @default(now()) @db.Timestamptz
+  metal           MetalType
+  grossWeight     Decimal?       @db.Decimal(10, 3)
+  netWeight       Decimal?       @db.Decimal(10, 3)
+  fineWeightDelta Decimal        @default(0) @db.Decimal(10, 3)
+  ornamentName    String?        @db.VarChar(100)
+  labourAmount    Decimal?       @db.Decimal(10, 2)
+  paymentAmount   Decimal?       @db.Decimal(10, 2)
+  notes           String?        @db.Text
+
+  karigar         Karigar        @relation(fields: [karigarId], references: [id], onDelete: Cascade)
+
+  @@index([karigarId, date(sort: Desc)])
+  @@map("karigar_transactions")
+}
+
+// ==========================================
+// 7. GIRVI & GOLD LOAN PAWN BOOK
+// ==========================================
+
+enum GirviStatus {
+  ACTIVE
+  RELEASED
+  AUCTIONED
+}
+
+model GirviLoan {
+  id                  String         @id @default(uuid()) @db.Uuid
+  businessId          String         @db.Uuid
+  loanNumber          String         @db.VarChar(50)
+  packetNumber        String         @db.VarChar(50)
+  safeLocation        String         @db.VarChar(50) // "Tijori #1, Dabba #A"
+  customerId          String?        @db.Uuid
+  customerName        String         @db.VarChar(100)
+  customerPhone       String         @db.VarChar(20)
+  customerCity        String         @default("Jaipur") @db.VarChar(50)
+  customerAddress     String?        @db.Text
+  
+  startDate           DateTime       @default(now()) @db.Timestamptz
+  principalAmount     Decimal        @db.Decimal(12, 2)
+  monthlyInterestRate Decimal        @db.Decimal(5, 2) // e.g. 1.5% saikda
+  durationMonths      Int            @default(6)
+  status              GirviStatus    @default(ACTIVE)
+  settledDate         DateTime?      @db.Timestamptz
+  principalRepaid     Decimal        @default(0) @db.Decimal(12, 2)
+  interestPaid        Decimal        @default(0) @db.Decimal(12, 2)
+  notes               String?        @db.Text
+
+  business            Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  customer            Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  pledgedOrnaments    PledgedOrnament[]
+
+  @@unique([businessId, loanNumber])
+  @@index([businessId, status])
+  @@index([businessId, packetNumber])
+  @@map("girvi_loans")
+}
+
+model PledgedOrnament {
+  id              String      @id @default(uuid()) @db.Uuid
+  girviLoanId     String      @db.Uuid
+  name            String      @db.VarChar(100)
+  metal           MetalType   @default(GOLD)
+  purity          String      @db.VarChar(10)
+  grossWeight     Decimal     @db.Decimal(10, 3)
+  netWeight       Decimal     @db.Decimal(10, 3)
+
+  girviLoan       GirviLoan   @relation(fields: [girviLoanId], references: [id], onDelete: Cascade)
+
+  @@map("pledged_ornaments")
+}
+
+// ==========================================
+// 8. DOUBLE-ENTRY ACCOUNTS & CASHBOOK
+// ==========================================
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+model Account {
+  id            String         @id @default(uuid()) @db.Uuid
+  businessId    String         @db.Uuid
+  code          String         @db.VarChar(20)
+  name          String         @db.VarChar(100)
+  type          AccountType
+  currentBalance Decimal       @default(0) @db.Decimal(14, 2)
+
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  journalLines  JournalLine[]
+
+  @@unique([businessId, code])
+  @@map("accounts")
+}
+
+model JournalEntry {
+  id            String         @id @default(uuid()) @db.Uuid
+  businessId    String         @db.Uuid
+  voucherNumber String         @db.VarChar(50)
+  date          DateTime       @default(now()) @db.Timestamptz
+  description   String         @db.Text
+  lines         JournalLine[]
+
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id              String        @id @default(uuid()) @db.Uuid
+  journalEntryId  String        @db.Uuid
+  accountId       String        @db.Uuid
+  debitAmount     Decimal       @default(0) @db.Decimal(12, 2)
+  creditAmount    Decimal       @default(0) @db.Decimal(12, 2)
+
+  journalEntry    JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account         Account       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@map("journal_lines")
+}
+
+// ==========================================
+// 9. AUDIT LOGS
+// ==========================================
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String?     @db.Uuid
+  action      String      @db.VarChar(100) // "DELETE_RATE", "OVERRIDE_MAKING", "MANUAL_DISCOUNT"
+  entityType  String      @db.VarChar(50)
+  entityId    String      @db.VarChar(100)
+  oldData     Json?
+  newData     Json?
+  timestamp   DateTime    @default(now()) @db.Timestamptz
+
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([timestamp(sort: Desc)])
+  @@map("audit_logs")
+}
+```
