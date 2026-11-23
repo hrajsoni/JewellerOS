@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { AuthProvider, useAuth } from "../modules/auth/AuthContext";
 import { LoginModal } from "../components/auth/LoginModal";
+import { MetalRatesModal } from "../components/rates/MetalRatesModal";
+import { getLatestMetalRates } from "../modules/rates/store";
 import {
   InvoiceLineItem,
   FinalizedInvoice,
@@ -145,10 +147,21 @@ function WorkspaceMain() {
   const [allTenants, setAllTenants] = useState<JewellerTenant[]>([]);
   const [activeTenant, setActiveTenant] = useState<JewellerTenant>(() => getActiveTenant());
   const [isTenantModalOpen, setIsTenantModalOpen] = useState<boolean>(false);
+  const [isRatesModalOpen, setIsRatesModalOpen] = useState<boolean>(false);
 
-  // Shop Rates & Profile State (Scoped to Active Showroom)
-  const [goldRate, setGoldRate] = useState<number>(activeTenant.defaultGoldRate || 150000);
-  const [silverRate, setSilverRate] = useState<number>(activeTenant.defaultSilverRate || 95000);
+  // Shop Rates & Profile State (Scoped to Active Showroom & Daily Sarafa Board)
+  const [goldRate, setGoldRate] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      return getLatestMetalRates().gold24k;
+    }
+    return activeTenant.defaultGoldRate || 150000;
+  });
+  const [silverRate, setSilverRate] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      return getLatestMetalRates().silver999PerKg;
+    }
+    return activeTenant.defaultSilverRate || 95000;
+  });
   const [shopName, setShopName] = useState<string>(activeTenant.businessName || "Sandhya Jewellers");
   const [gstin, setGstin] = useState<string>(activeTenant.gstin || "08AAAAJ1234F1Z8");
   const [phone, setPhone] = useState<string>(activeTenant.phone || "+91 94140 12345");
@@ -565,6 +578,7 @@ function WorkspaceMain() {
           }}
           onOpenGoldCalc={() => setActiveTab("/calculator")}
           onOpenSilverCalc={() => setActiveTab("/calculator")}
+          onOpenRatesModal={() => setIsRatesModalOpen(true)}
           activeTenantName={activeTenant.businessName}
           activeTenantCity={activeTenant.city}
           onOpenShowroomSwitcher={() => setIsTenantModalOpen(true)}
@@ -966,6 +980,16 @@ function WorkspaceMain() {
 
       {/* Staff Identity, Role Switcher & Security PIN Modal */}
       <LoginModal />
+
+      {/* Sarafa Market Metal Rates Board & Price Audit Ledger */}
+      <MetalRatesModal
+        isOpen={isRatesModalOpen}
+        onClose={() => setIsRatesModalOpen(false)}
+        onRatesUpdated={(record) => {
+          setGoldRate(record.gold24k);
+          setSilverRate(record.silver999PerKg);
+        }}
+      />
     </div>
   );
 }

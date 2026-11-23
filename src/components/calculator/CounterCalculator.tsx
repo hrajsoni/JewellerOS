@@ -118,6 +118,15 @@ export const CounterCalculator: React.FC<CounterCalculatorProps> = ({
   const [silverRate, setSilverRate] = useState<string>(initialSilverRate.toString());
   const [silverUnit, setSilverUnit] = useState<SilverRateUnit>("per_kg");
 
+  // Keep rates in sync when updated via Daily Board
+  React.useEffect(() => {
+    setGoldRate(initialGoldRate.toString());
+  }, [initialGoldRate]);
+
+  React.useEffect(() => {
+    setSilverRate(initialSilverRate.toString());
+  }, [initialSilverRate]);
+
   // Karat / Fineness
   const [goldPurity, setGoldPurity] = useState<GoldPurityKey>("18K");
   const [silverPurity, setSilverPurity] = useState<SilverPurityKey>("925");

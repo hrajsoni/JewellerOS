@@ -26,9 +26,9 @@
 * **Status**: 🟡 **Interactive Prototype** $\rightarrow$ *Target: Milestone 1 & 8*
 
 ### 🟢 Module 3: Metal Rate Management
-* **Current State**: Ticker bar (`TopRateBar.tsx`) displays live 24K gold and silver rates with 1-click update dialog.
-* **Target State**: Historical metal rate registry in PostgreSQL with timestamps, separate selling vs purchase rates, 24K/22K/18K/14K/Silver/Platinum rates, and branch-level rate overrides.
-* **Status**: 🟡 **Interactive Prototype** $\rightarrow$ *Target: Milestone 2*
+* **Current State**: Daily Sarafa Market Rates Board and historical price audit trail (`MetalRatesModal.tsx`). Real-time K/24 formula engine auto-deriving 22K (916), 18K (750), 14K (585) & Silver 925 from 24K benchmark. Old-gold exchange/buyback rate tracking. Immutable audit trail with employee attribution, source logging, and live ticker sync to Counter Calculator and Top Bar. Guarded by `MANAGE_METAL_RATES` (Sales staff in Read-Only Mode).
+* **Target State**: Scheduled cron fetch from MCX/IBJA bullion APIs and branch rate overrides.
+* **Status**: 🟢 **Completed & Integrated (Milestone 2)**
 
 ### 🟡 Module 4: Inventory & Stock Management
 * **Current State**: `InventoryManager.tsx` with category filters, barcode display, gross/net weight, stone deduction, tray locations, and load-into-calculator capability.

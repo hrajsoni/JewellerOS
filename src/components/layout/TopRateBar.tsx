@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowUpRight, Store, ChevronDown } from "lucide-react";
+import { ArrowUpRight, Store, ChevronDown, TrendingUp } from "lucide-react";
 import { GlassButton } from "../glass/GlassButton";
 import { FastRoleSwitcher } from "../auth/FastRoleSwitcher";
 
@@ -9,6 +9,7 @@ export interface TopRateBarProps {
   onOpenQuickInvoice?: () => void;
   onOpenGoldCalc?: () => void;
   onOpenSilverCalc?: () => void;
+  onOpenRatesModal?: () => void;
   activeTenantName?: string;
   activeTenantCity?: string;
   onOpenShowroomSwitcher?: () => void;
@@ -20,6 +21,7 @@ export const TopRateBar: React.FC<TopRateBarProps> = ({
   onOpenQuickInvoice,
   onOpenGoldCalc,
   onOpenSilverCalc,
+  onOpenRatesModal,
   activeTenantName,
   activeTenantCity,
   onOpenShowroomSwitcher,
@@ -55,11 +57,12 @@ export const TopRateBar: React.FC<TopRateBarProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059]" />
             <button
-              onClick={onOpenGoldCalc}
-              className="hover:text-[var(--text-primary)] transition-colors text-left"
+              onClick={onOpenRatesModal || onOpenGoldCalc}
+              className="hover:text-[var(--text-primary)] transition-colors text-left group"
+              title="Click to View or Update Market Rates"
             >
               <span className="text-[var(--text-tertiary)]">24K Gold: </span>
-              <span className="font-mono font-semibold text-[var(--text-primary)]">
+              <span className="font-mono font-semibold text-[var(--text-primary)] group-hover:text-[#DFC488]">
                 ₹{gold24kRate.toLocaleString("en-IN")}
               </span>
               <span className="text-[10px] text-[var(--text-tertiary)]"> / 10g</span>
@@ -68,11 +71,12 @@ export const TopRateBar: React.FC<TopRateBarProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={onOpenGoldCalc}
-              className="hover:text-[var(--text-primary)] transition-colors text-left"
+              onClick={onOpenRatesModal || onOpenGoldCalc}
+              className="hover:text-[var(--text-primary)] transition-colors text-left group"
+              title="Click to View or Update Market Rates"
             >
               <span className="text-[var(--text-tertiary)]">22K (916): </span>
-              <span className="font-mono font-medium text-[var(--text-primary)]">
+              <span className="font-mono font-medium text-[var(--text-primary)] group-hover:text-[#DFC488]">
                 ₹{gold22kRate.toLocaleString("en-IN")}
               </span>
               <span className="text-[10px] text-[var(--text-tertiary)]"> / 10g</span>
@@ -81,16 +85,26 @@ export const TopRateBar: React.FC<TopRateBarProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={onOpenSilverCalc}
-              className="hover:text-[var(--text-primary)] transition-colors text-left"
+              onClick={onOpenRatesModal || onOpenSilverCalc}
+              className="hover:text-[var(--text-primary)] transition-colors text-left group"
+              title="Click to View or Update Market Rates"
             >
               <span className="text-[var(--text-tertiary)]">Silver: </span>
-              <span className="font-mono font-medium text-[var(--text-primary)]">
+              <span className="font-mono font-medium text-[var(--text-primary)] group-hover:text-[#DFC488]">
                 ₹{silverRate.toLocaleString("en-IN")}
               </span>
               <span className="text-[10px] text-[var(--text-tertiary)]"> / kg</span>
             </button>
           </div>
+
+          <button
+            onClick={onOpenRatesModal}
+            className="hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#C5A059]/10 hover:bg-[#C5A059]/20 border border-[#C5A059]/20 text-[#DFC488] text-[11px] font-medium transition-all"
+            title="Open Sarafa Market Rate Board & Audit Ledger"
+          >
+            <TrendingUp size={12} />
+            <span>Daily Board</span>
+          </button>
         </div>
 
         {/* Right Actions: RBAC Fast Role Switcher & New Invoice */}
