@@ -19,7 +19,10 @@ import {
   Scale,
   Receipt,
   RotateCcw,
+  Lock,
 } from "lucide-react";
+import { AuthProvider, useAuth } from "../modules/auth/AuthContext";
+import { LoginModal } from "../components/auth/LoginModal";
 import {
   InvoiceLineItem,
   FinalizedInvoice,
@@ -95,7 +98,42 @@ import {
   payStaffSalary,
 } from "../modules/staff/store";
 
-export default function WorkspacePage() {
+const RestrictedModuleGuard: React.FC<{
+  moduleName: string;
+  allowedRoles: string;
+}> = ({ moduleName, allowedRoles }) => {
+  const { user, role, openLoginModal } = useAuth();
+  return (
+    <div className="py-16 px-4">
+      <div className="max-w-md mx-auto p-6 sm:p-8 rounded-2xl bg-[var(--surface-primary)] border border-amber-500/20 backdrop-blur-xl text-center space-y-4 shadow-2xl">
+        <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+          <Lock size={22} />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+            Access Restricted: {moduleName}
+          </h2>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1.5 leading-relaxed">
+            Your current employee profile (
+            <span className="font-semibold text-[var(--text-primary)]">{user.fullName}</span> ·{" "}
+            <span className="text-[#DFC488] font-mono">{role.replace("_", " ")}</span>) does not have permission to view or manage these records.
+          </p>
+          <div className="mt-3 p-2.5 rounded-lg bg-black/40 border border-white/[0.04] text-[11px] text-[var(--text-secondary)]">
+            Authorized roles: <span className="font-semibold text-emerald-400">{allowedRoles}</span>
+          </div>
+        </div>
+        <div className="pt-2">
+          <GlassButton variant="primary" size="sm" onClick={openLoginModal}>
+            Switch to Authorized Profile
+          </GlassButton>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+function WorkspaceMain() {
+  const { user, role, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("/calculator");
   const [invoicingSubTab, setInvoicingSubTab] = useState<"active" | "history">("active");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -732,47 +770,75 @@ export default function WorkspacePage() {
 
           {/* View: Girvi / Gold Loan Pawn Brokering (Omunim Standard) */}
           {activeTab === "/girvi" && (
-            <GirviManager
-              loans={girviLoans}
-              onAddLoan={handleAddGirviLoan}
-              onReleaseLoan={handleReleaseGirviLoan}
-              shopName={activeTenant.businessName}
-            />
+            hasPermission("MANAGE_GIRVI") ? (
+              <GirviManager
+                loans={girviLoans}
+                onAddLoan={handleAddGirviLoan}
+                onReleaseLoan={handleReleaseGirviLoan}
+                shopName={activeTenant.businessName}
+              />
+            ) : (
+              <RestrictedModuleGuard
+                moduleName="Girvi / Gold Loan Vault"
+                allowedRoles="Owner, Admin, Manager"
+              />
+            )
           )}
 
           {/* View: Karigar & Artisan Bullion Ledger */}
           {activeTab === "/karigar" && (
-            <KarigarManager
-              karigars={karigars}
-              transactions={karigarTxns}
-              onAddKarigar={handleAddKarigar}
-              onIssueMetal={handleIssueMetalToKarigar}
-              onReceiveOrnament={handleReceiveOrnamentFromKarigar}
-              onPayLabour={handlePayLabourToKarigar}
-              shopName={activeTenant.businessName}
-            />
+            hasPermission("MANAGE_KARIGAR") ? (
+              <KarigarManager
+                karigars={karigars}
+                transactions={karigarTxns}
+                onAddKarigar={handleAddKarigar}
+                onIssueMetal={handleIssueMetalToKarigar}
+                onReceiveOrnament={handleReceiveOrnamentFromKarigar}
+                onPayLabour={handlePayLabourToKarigar}
+                shopName={activeTenant.businessName}
+              />
+            ) : (
+              <RestrictedModuleGuard
+                moduleName="Karigar & Artisan Ledger"
+                allowedRoles="Owner, Admin, Manager, Karigar Manager"
+              />
+            )
           )}
 
           {/* View: Staff Roster & Salary Payroll */}
           {activeTab === "/staff" && (
-            <StaffManager
-              staffList={staffList}
-              paymentRecords={staffPayments}
-              onAddStaff={handleAddStaffMember}
-              onIssueAdvance={handleIssueStaffAdvance}
-              onPaySalary={handlePayStaffSalary}
-              shopName={activeTenant.businessName}
-            />
+            hasPermission("MANAGE_EMPLOYEES") ? (
+              <StaffManager
+                staffList={staffList}
+                paymentRecords={staffPayments}
+                onAddStaff={handleAddStaffMember}
+                onIssueAdvance={handleIssueStaffAdvance}
+                onPaySalary={handlePayStaffSalary}
+                shopName={activeTenant.businessName}
+              />
+            ) : (
+              <RestrictedModuleGuard
+                moduleName="Staff Payroll & Advance Master"
+                allowedRoles="Owner, Admin"
+              />
+            )
           )}
 
           {/* View: Sales Analytics & Margin Reports */}
           {activeTab === "/reports" && (
-            <ReportsOverview
-              invoices={invoices}
-              currentGoldRate={goldRate}
-              currentSilverRate={silverRate}
-              onViewInvoice={handleViewInvoice}
-            />
+            hasPermission("VIEW_OWNER_REPORTS") ? (
+              <ReportsOverview
+                invoices={invoices}
+                currentGoldRate={goldRate}
+                currentSilverRate={silverRate}
+                onViewInvoice={handleViewInvoice}
+              />
+            ) : (
+              <RestrictedModuleGuard
+                moduleName="Financial & Profit Reports"
+                allowedRoles="Owner, Admin, Accountant"
+              />
+            )
           )}
 
           {/* View: Shop Settings */}
@@ -897,6 +963,17 @@ export default function WorkspacePage() {
         onSelectTenant={handleSelectTenant}
         onRegisterTenant={handleRegisterTenant}
       />
+
+      {/* Staff Identity, Role Switcher & Security PIN Modal */}
+      <LoginModal />
     </div>
+  );
+}
+
+export default function WorkspacePage() {
+  return (
+    <AuthProvider>
+      <WorkspaceMain />
+    </AuthProvider>
   );
 }

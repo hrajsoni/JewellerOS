@@ -34,7 +34,9 @@ import {
   EyeOff,
   MessageCircle,
   ShieldCheck,
+  Lock,
 } from "lucide-react";
+import { useAuth } from "../../modules/auth/AuthContext";
 import {
   InvoiceLineItem,
   OldGoldExchangeItem,
@@ -136,8 +138,12 @@ export const CounterCalculator: React.FC<CounterCalculatorProps> = ({
   const [prodWastage, setProdWastage] = useState<string>("6"); // 6% default
   const [labourCost, setLabourCost] = useState<string>("0");
 
+  const { hasPermission, openLoginModal } = useAuth();
+  const canViewPurchaseCost = hasPermission("VIEW_PURCHASE_COSTS");
+
   const [copied, setCopied] = useState<boolean>(false);
   const [isCustomerDisplayMode, setIsCustomerDisplayMode] = useState<boolean>(true); // Default: Hide internal cost from customers
+  const effectiveCustomerMode = !canViewPurchaseCost || isCustomerDisplayMode;
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState<boolean>(false);
   const [whatsAppPhone, setWhatsAppPhone] = useState<string>("+91 ");
 
@@ -633,7 +639,7 @@ Fine Gold Eq (24ct): ${formatGrams(calculationResult.fineWeight)} = ${formatINR(
             </div>
 
             {/* Watchmaker-Style Tabular Settlement Breakdown or Privacy Shield */}
-            {isCustomerDisplayMode ? (
+            {effectiveCustomerMode ? (
               <div className="rounded-xl p-5 bg-black/30 border border-white/[0.05] text-center space-y-2">
                 <div className="inline-flex p-2 rounded-full bg-[#C5A059]/10 text-[#DFC488] mb-1">
                   <ShieldCheck size={18} />
@@ -646,10 +652,21 @@ Fine Gold Eq (24ct): ${formatGrams(calculationResult.fineWeight)} = ${formatINR(
                 </p>
                 <button
                   type="button"
-                  onClick={() => setIsCustomerDisplayMode(false)}
-                  className="text-xs text-[#DFC488] font-medium underline hover:text-white pt-1"
+                  onClick={() => {
+                    if (!canViewPurchaseCost) {
+                      openLoginModal();
+                    } else {
+                      setIsCustomerDisplayMode(false);
+                    }
+                  }}
+                  className="text-xs text-[#DFC488] font-medium underline hover:text-white pt-1 inline-flex items-center gap-1.5 mx-auto"
                 >
-                  Unlock Sethji Owner Mode (लागत व मुनाफा देखें)
+                  {!canViewPurchaseCost && <Lock size={12} className="text-amber-400" />}
+                  <span>
+                    {!canViewPurchaseCost
+                      ? "Requires Manager PIN to View Costs"
+                      : "Unlock Sethji Owner Mode (लागत व मुनाफा देखें)"}
+                  </span>
                 </button>
               </div>
             ) : (
@@ -709,6 +726,16 @@ Fine Gold Eq (24ct): ${formatGrams(calculationResult.fineWeight)} = ${formatINR(
                       ({calculationResult.grossMarginPercentage.toFixed(1)}%)
                     </span>
                   </div>
+                </div>
+
+                <div className="pt-2 text-right">
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerDisplayMode(true)}
+                    className="text-[11px] text-[var(--text-tertiary)] hover:text-[#DFC488] transition-colors inline-flex items-center gap-1"
+                  >
+                    <EyeOff size={11} /> Hide and Return to Customer Mode
+                  </button>
                 </div>
               </div>
             )}

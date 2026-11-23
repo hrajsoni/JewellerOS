@@ -16,9 +16,9 @@
 ## Detailed Module Audit & Roadmap Scorecard
 
 ### 🟢 Module 1: Authentication & Employee Management
-* **Current State**: Showroom switching modal (`JewellerSwitcherModal.tsx`) and staff list (`StaffManager.tsx`) exist in client state. No password authentication, session management, or server-side RBAC.
-* **Target State**: Owner and employee login with Argon2/bcrypt password hashing, session tokens, and strict role-based access control (Owner, Admin, Manager, Accountant, Salesperson, Inventory Clerk, Karigar Manager).
-* **Status**: 🟡 **Interactive Prototype** $\rightarrow$ *Target: Milestone 1*
+* **Current State**: Full RBAC engine with 7 roles (`OWNER`, `ADMIN`, `MANAGER`, `ACCOUNTANT`, `SALESPERSON`, `INVENTORY_CLERK`, `KARIGAR_MANAGER`). Active permission matrix strictly masking purchase costs, profit margins, and confidential shop ledgers from sales staff. Interactive `LoginModal` (Quick Switcher + Security PIN), `FastRoleSwitcher` header widget, and `RestrictedModuleGuard` protecting Girvi, Karigar, Staff, and Reports tabs.
+* **Target State**: Full session tokens, password hashing, and server-side RBAC session guards.
+* **Status**: 🟢 **Completed & Integrated (Milestone 1)**
 
 ### 🟡 Module 2: Dashboard
 * **Current State**: `FinancialOverview.tsx` renders live counter sales, recent invoices, stock summaries, and quick action shortcuts.

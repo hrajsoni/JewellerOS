@@ -17,7 +17,10 @@ import {
   Tag,
   MapPin,
   Sparkles,
+  EyeOff,
+  Lock,
 } from "lucide-react";
+import { useAuth } from "../../modules/auth/AuthContext";
 
 export interface InventoryManagerProps {
   stockItems: StockItem[];
@@ -32,6 +35,9 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   onLoadIntoCalculator,
   currentGoldRate,
 }) => {
+  const { hasPermission } = useAuth();
+  const canViewCosts = hasPermission("VIEW_PURCHASE_COSTS");
+
   const [searchQuery, setSearchQuery] = useState("");
   const [metalFilter, setMetalFilter] = useState<"all" | "gold" | "silver">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -160,9 +166,16 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
           <span className="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
             Wholesale Asset Valuation
           </span>
-          <div className="text-2xl font-semibold text-[var(--accent-emerald)] num-tabular">
-            {formatINR(totalValuation)}
-          </div>
+          {canViewCosts ? (
+            <div className="text-2xl font-semibold text-[var(--accent-emerald)] num-tabular">
+              {formatINR(totalValuation)}
+            </div>
+          ) : (
+            <div className="text-sm font-medium text-amber-400/90 flex items-center gap-1.5 py-1">
+              <EyeOff size={14} />
+              <span>Masked (Sales Mode)</span>
+            </div>
+          )}
           <span className="text-[11px] text-[var(--text-secondary)] block">
             {stockItems.filter((i) => i.status !== "sold").length} Live Active Pieces
           </span>
@@ -223,7 +236,9 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                 <th className="py-3 px-4 font-semibold text-center">Purity</th>
                 <th className="py-3 px-4 font-semibold text-right">Net Wt</th>
                 <th className="py-3 px-4 font-semibold">Tray / Vault</th>
-                <th className="py-3 px-4 font-semibold text-right">Wholesale Cost</th>
+                <th className="py-3 px-4 font-semibold text-right">
+                  {canViewCosts ? "Wholesale Cost" : "Cost"}
+                </th>
                 <th className="py-3 px-4 font-semibold text-right">Counter Action</th>
               </tr>
             </thead>
@@ -266,7 +281,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                       </div>
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono text-[var(--text-secondary)]">
-                      {formatINR(item.acquisitionCost)}
+                      {canViewCosts ? (
+                        formatINR(item.acquisitionCost)
+                      ) : (
+                        <span className="text-[10px] text-[var(--text-tertiary)] font-mono flex items-center justify-end gap-1">
+                          <EyeOff size={10} className="text-amber-400/70" /> ••••••
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <button

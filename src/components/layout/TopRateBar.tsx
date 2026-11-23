@@ -1,6 +1,7 @@
 import React from "react";
 import { ArrowUpRight, Store, ChevronDown } from "lucide-react";
 import { GlassButton } from "../glass/GlassButton";
+import { FastRoleSwitcher } from "../auth/FastRoleSwitcher";
 
 export interface TopRateBarProps {
   gold24kRate: number;
@@ -92,8 +93,9 @@ export const TopRateBar: React.FC<TopRateBarProps> = ({
           </div>
         </div>
 
-        {/* Right Action */}
+        {/* Right Actions: RBAC Fast Role Switcher & New Invoice */}
         <div className="flex items-center gap-2.5 ml-auto sm:ml-0">
+          <FastRoleSwitcher />
           <GlassButton
             variant="primary"
             size="sm"
