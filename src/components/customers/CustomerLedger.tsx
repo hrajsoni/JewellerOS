@@ -26,6 +26,8 @@ import {
   Building2,
   User,
   History,
+  MessageCircle,
+  ShieldCheck,
 } from "lucide-react";
 
 export interface CustomerLedgerProps {
@@ -55,8 +57,34 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
   const [newCity, setNewCity] = useState("Jaipur");
   const [newAddress, setNewAddress] = useState("");
   const [newGstin, setNewGstin] = useState("URP (Retail Consumer)");
+  const [newPan, setNewPan] = useState("");
+  const [newAadhaar, setNewAadhaar] = useState("");
   const [newTier, setNewTier] = useState<CustomerType>("retail");
   const [newNotes, setNewNotes] = useState("");
+
+  const handleShareCustomerStatement = (c: Customer) => {
+    const cleanPhone = c.phone.replace(/[^0-9]/g, "");
+    const msg =
+      `*CUSTOMER ACCOUNT STATEMENT · SANDHYA JEWELLERS*\n` +
+      `Customer: *${c.name}* (${c.phone})\n` +
+      `City: ${c.city}\n` +
+      `--------------------------------\n` +
+      `Total Purchases: ${formatINR(c.totalPurchases)} (${c.totalInvoicesCount} Invoices)\n` +
+      `Gold Jewellery Purchased: ${formatGrams(c.totalGoldWeightGrams)}\n` +
+      (c.outstandingCredit > 0
+        ? `*Store Credit / Advance: ${formatINR(c.outstandingCredit)}*\n`
+        : c.outstandingCredit < 0
+        ? `*Pending Due (उधार): ${formatINR(Math.abs(c.outstandingCredit))}*\n`
+        : `*Balance: Nil (All settled)*\n`) +
+      `--------------------------------\n` +
+      `Thank you for trusting Sandhya Jewellers!`;
+
+    const target = cleanPhone.length === 10 ? "91" + cleanPhone : cleanPhone || "";
+    const url = target
+      ? `https://wa.me/${target}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+  };
 
   // Filtered customer list
   const filteredCustomers = customers.filter((c) => {
@@ -65,7 +93,8 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
       c.name.toLowerCase().includes(q) ||
       c.phone.toLowerCase().includes(q) ||
       c.city.toLowerCase().includes(q) ||
-      (c.gstin && c.gstin.toLowerCase().includes(q));
+      (c.gstin && c.gstin.toLowerCase().includes(q)) ||
+      (c.panNumber && c.panNumber.toLowerCase().includes(q));
     const matchesTier = tierFilter === "all" || c.customerType === tierFilter;
     return matchesSearch && matchesTier;
   });
@@ -95,6 +124,8 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
       city: newCity,
       address: newAddress || undefined,
       gstin: newGstin || undefined,
+      panNumber: newPan.toUpperCase().trim() || undefined,
+      aadhaarNumber: newAadhaar.trim() || undefined,
       customerType: newTier,
       notes: newNotes || undefined,
     });
@@ -104,6 +135,8 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
     setNewPhone("+91 ");
     setNewEmail("");
     setNewAddress("");
+    setNewPan("");
+    setNewAadhaar("");
     setNewNotes("");
     setIsAddModalOpen(false);
   };
@@ -416,6 +449,17 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
                 </span>
               </div>
 
+              {selectedCustomer.panNumber && (
+                <div className="col-span-2 sm:col-span-2 pt-2 border-t border-white/[0.04]">
+                  <span className="text-[10px] uppercase text-[var(--text-tertiary)] block">
+                    PAN (Sec 139A Compliant)
+                  </span>
+                  <span className="font-mono font-semibold text-[#DFC488]">
+                    {selectedCustomer.panNumber}
+                  </span>
+                </div>
+              )}
+
               {selectedCustomer.address && (
                 <div className="col-span-2 sm:col-span-4 pt-2 border-t border-white/[0.04]">
                   <span className="text-[10px] uppercase text-[var(--text-tertiary)] block">
@@ -446,18 +490,29 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
                   <History size={14} className="text-[#C5A059]" />
                   Past Finalized Invoices ({customerInvoices.length})
                 </h4>
-                <GlassButton
-                  variant="gold-outline"
-                  size="sm"
-                  onClick={() => {
-                    const c = selectedCustomer;
-                    setSelectedCustomer(null);
-                    onStartBillForCustomer(c);
-                  }}
-                  icon={<Receipt size={13} />}
-                >
-                  Create New Bill
-                </GlassButton>
+                <div className="flex items-center gap-2">
+                  <GlassButton
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleShareCustomerStatement(selectedCustomer)}
+                    icon={<MessageCircle size={13} className="text-[#25D366]" />}
+                    className="text-[#25D366] hover:bg-[#25D366]/10"
+                  >
+                    Share Statement
+                  </GlassButton>
+                  <GlassButton
+                    variant="gold-outline"
+                    size="sm"
+                    onClick={() => {
+                      const c = selectedCustomer;
+                      setSelectedCustomer(null);
+                      onStartBillForCustomer(c);
+                    }}
+                    icon={<Receipt size={13} />}
+                  >
+                    Create New Bill
+                  </GlassButton>
+                </div>
               </div>
 
               {customerInvoices.length === 0 ? (
@@ -586,6 +641,28 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
               value={newGstin}
               onChange={(e) => setNewGstin(e.target.value)}
             />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <GlassInput
+                label="PAN Number (Sec 139A Compliance)"
+                placeholder="ABCDE1234F"
+                value={newPan}
+                onChange={(e) => setNewPan(e.target.value.toUpperCase())}
+              />
+              <GlassInput
+                label="Aadhaar Number (Optional UID)"
+                placeholder="12-digit UID"
+                value={newAadhaar}
+                onChange={(e) => setNewAadhaar(e.target.value)}
+              />
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-center gap-2">
+              <ShieldCheck size={14} className="shrink-0" />
+              <span>
+                Income Tax Sec 139A: Transactions exceeding ₹2,00,000 require statutory customer PAN capture.
+              </span>
+            </div>
 
             <GlassInput
               label="Complete Billing Address"

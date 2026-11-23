@@ -40,15 +40,15 @@
 * **Target State**: Thermal printing native driver hooks and optional e-Way Bill generation for wholesale amounts.
 * **Status**: 🟢 **Completed & Integrated (Milestone 4)**
 
-### 🔴 Module 6: Purchase & Suppliers
-* **Current State**: Supplier profile mock data seeded in inventory store.
-* **Target State**: Complete purchase invoice entry, metal purity test records, supplier payment allocations, purchase returns, and supplier metal reconciliation.
-* **Status**: 🔴 **Pending Implementation** $\rightarrow$ *Target: Milestone 5*
+### 🟢 Module 6: Purchase & Suppliers
+* **Current State**: Comprehensive wholesale purchase pipeline and supplier accounts ledger (`PurchaseManager.tsx`). Multi-item purchase invoices with 3% ITC GST calculation, split settlement (Immediate Bank/Cash or Credit liabilities), and automatic atomic stock inwarding into serialized inventory with auto-SKU and Code 128 barcode tagging. Supplier payment vouchers (`recordSupplierPayment`), pure bullion balance tracking, and 1-click WhatsApp statement sharing. Protected by `VIEW_PURCHASE_COSTS` (strictly masked from sales staff).
+* **Target State**: E-Way bill PDF attachment and bullion refinery assay certificate uploads.
+* **Status**: 🟢 **Completed & Integrated (Milestone 5)**
 
-### 🟡 Module 7: Customer Management
-* **Current State**: `CustomerLedger.tsx` with profiles, city, phone, GSTIN, purchase history, outstanding dues, and 1-click start billing.
-* **Target State**: Connected relational ledger, customer advance deposits, loyalty points, and formal old-gold purchase vouchers.
-* **Status**: 🟡 **Interactive Prototype** $\rightarrow$ *Target: Milestone 5*
+### 🟢 Module 7: Customer Management
+* **Current State**: Full customer directory and ledger (`CustomerLedger.tsx`). Retail, VIP, and Wholesale tiers. Statutory compliance for transactions > ₹2,00,000 (Section 139A PAN card capture and Aadhaar UID). Comprehensive purchase history, gold/silver weight aggregates, store credit and udhar dues tracking, 1-click WhatsApp statement dispatch, and fast checkout handoff.
+* **Target State**: Automated WhatsApp festive greeting engine (Dhanteras/Akshaya Tritiya) and loyalty points redemption.
+* **Status**: 🟢 **Completed & Integrated (Milestone 5)**
 
 ### 🟢 Module 8: Karigar & Manufacturing
 * **Current State**: `KarigarManager.tsx` with artisan profiles, bullion issuance, finished goods receipt, ghat/wastage deductions, labour payouts, and live pure gold balance tracking.

@@ -16,6 +16,7 @@ import {
   Hammer,
   Briefcase,
   Lock,
+  Truck,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../modules/auth/AuthContext";
@@ -38,6 +39,7 @@ export const NAV_ITEMS: NavItem[] = [
   { name: "Karigar Ledger", href: "/karigar", icon: Hammer, requiredPermission: "MANAGE_KARIGAR" },
   { name: "Staff & Payroll", href: "/staff", icon: Briefcase, requiredPermission: "MANAGE_EMPLOYEES" },
   { name: "Inventory", href: "/inventory", icon: Package },
+  { name: "Purchases & Suppliers", href: "/purchases", icon: Truck, requiredPermission: "VIEW_PURCHASE_COSTS" },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Reports", href: "/reports", icon: BarChart3, requiredPermission: "VIEW_OWNER_REPORTS" },
   { name: "Shop Settings", href: "/settings", icon: Settings },

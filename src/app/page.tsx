@@ -106,6 +106,22 @@ import {
   payStaffSalary,
 } from "../modules/staff/store";
 
+import { PurchaseManager } from "../components/suppliers/PurchaseManager";
+import {
+  SupplierProfile,
+  PurchaseInvoice,
+  SupplierPaymentRecord,
+  NewSupplierInput,
+} from "../modules/suppliers/types";
+import {
+  getSavedSuppliers,
+  getSavedPurchases,
+  getSavedSupplierPayments,
+  recordPurchaseInvoice,
+  recordSupplierPayment,
+  addSupplier,
+} from "../modules/suppliers/store";
+
 const RestrictedModuleGuard: React.FC<{
   moduleName: string;
   allowedRoles: string;
@@ -194,6 +210,11 @@ function WorkspaceMain() {
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [staffPayments, setStaffPayments] = useState<StaffPaymentRecord[]>([]);
 
+  // Suppliers & Purchase Invoices State
+  const [suppliers, setSuppliers] = useState<SupplierProfile[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseInvoice[]>([]);
+  const [supplierPayments, setSupplierPayments] = useState<SupplierPaymentRecord[]>([]);
+
   // Preloaded Data for Calculator
   const [preloadedCalcData, setPreloadedCalcData] = useState<PreloadedCalcData | null>(null);
 
@@ -217,6 +238,9 @@ function WorkspaceMain() {
     setKarigarTxns(getSavedKarigarTxns(tenant.id));
     setStaffList(getSavedStaff(tenant.id));
     setStaffPayments(getSavedStaffPayments(tenant.id));
+    setSuppliers(getSavedSuppliers(tenant.id));
+    setPurchases(getSavedPurchases(tenant.id));
+    setSupplierPayments(getSavedSupplierPayments(tenant.id));
     setDraftItems([]);
   };
 
@@ -589,6 +613,25 @@ function WorkspaceMain() {
     setStaffPayments(getSavedStaffPayments(activeTenant.id));
   };
 
+  // Supplier & Purchase Actions
+  const handleRecordPurchase = (invoiceInput: Omit<PurchaseInvoice, "id" | "createdAt">) => {
+    const result = recordPurchaseInvoice(invoiceInput, user, activeTenant.id);
+    setPurchases([result.invoice, ...purchases]);
+    setStockItems(result.updatedStock);
+    setSuppliers(result.updatedSuppliers);
+  };
+
+  const handleAddSupplier = (input: NewSupplierInput) => {
+    addSupplier(input, activeTenant.id);
+    setSuppliers(getSavedSuppliers(activeTenant.id));
+  };
+
+  const handlePaySupplier = (payment: Omit<SupplierPaymentRecord, "id" | "date">) => {
+    const result = recordSupplierPayment(payment, activeTenant.id);
+    setSupplierPayments([result.paymentRecord, ...supplierPayments]);
+    setSuppliers(result.updatedSuppliers);
+  };
+
   const handleStartBillForCustomer = (cust: Customer) => {
     setSelectedBillingCustomer({
       id: cust.id,
@@ -844,6 +887,26 @@ function WorkspaceMain() {
               currentGoldRate={goldRate}
               shopName={activeTenant.businessName}
             />
+          )}
+
+          {/* View: Purchases & Supplier Wholesale Costs */}
+          {activeTab === "/purchases" && (
+            hasPermission("VIEW_PURCHASE_COSTS") ? (
+              <PurchaseManager
+                suppliers={suppliers}
+                purchases={purchases}
+                payments={supplierPayments}
+                onRecordPurchase={handleRecordPurchase}
+                onAddSupplier={handleAddSupplier}
+                onPaySupplier={handlePaySupplier}
+                gold24kRate={goldRate}
+              />
+            ) : (
+              <RestrictedModuleGuard
+                moduleName="Purchases & Supplier Wholesale Costs"
+                allowedRoles="Owner, Admin, Manager, Accountant"
+              />
+            )
           )}
 
           {/* View: Customers & Ledger */}
