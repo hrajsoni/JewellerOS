@@ -2,6 +2,9 @@ import { GoldPurityKey, SilverPurityKey, MakingChargeType } from "../pricing/typ
 
 export interface InvoiceLineItem {
   id: string;
+  stockItemId?: string; // Links back to serialized physical stock item
+  sku?: string;
+  barcode?: string;
   name: string;
   metal: "gold" | "silver";
   purity: GoldPurityKey | SilverPurityKey;
@@ -48,7 +51,7 @@ export interface CustomerProfile {
   gstin?: string;
 }
 
-export type PaymentMethod = "Cash" | "UPI" | "Card" | "Bank Transfer" | "Old Gold";
+export type PaymentMethod = "Cash" | "UPI" | "Card" | "Bank Transfer" | "Old Gold" | "Customer Credit";
 
 export interface PaymentRecord {
   method: PaymentMethod;

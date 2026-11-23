@@ -1,5 +1,6 @@
 import { StockItem, Supplier, StockMovementRecord, StockStatus, JewelleryCategory } from "./types";
 import { UserSession } from "../auth/types";
+import { InvoiceLineItem, OldGoldExchangeItem } from "../invoicing/types";
 
 const INVENTORY_STORAGE_KEY = "jewellery_os_inventory_v3";
 const MOVEMENTS_STORAGE_KEY = "jewellery_os_stock_movements_v1";
@@ -358,4 +359,160 @@ export function generateSkuForCategory(category: JewelleryCategory, purity: stri
   const purityClean = purity.replace(/[^0-9K]/gi, "").toUpperCase();
   const seqPadded = sequence.toString().padStart(3, "0");
   return `${code}-${purityClean}-${seqPadded}`;
+}
+
+/**
+ * Atomic Stock Locking:
+ * Marks all invoiced serialized ornaments as "sold", moves location to "Sold / Delivered",
+ * and records an immutable stock_movement audit log.
+ */
+export function lockInvoicedStockItems(
+  lineItems: InvoiceLineItem[],
+  invoiceNumber: string,
+  user?: { id: string; fullName: string; role: string },
+  tenantId?: string
+): StockItem[] {
+  const currentStock = getSavedStock(tenantId);
+  const operator = user || {
+    id: "system-pos",
+    fullName: "Billing Counter Terminal",
+    role: "SALESPERSON",
+  };
+
+  let hasChanges = false;
+  const updatedStock = currentStock.map((stockItem) => {
+    // Match by stockItemId, SKU, barcode, or exact item name if not already sold
+    const isSoldInThisBill = lineItems.some(
+      (item) =>
+        (item.stockItemId && item.stockItemId === stockItem.id) ||
+        (item.sku && item.sku === stockItem.sku) ||
+        (item.barcode && item.barcode === stockItem.barcode) ||
+        (item.name.toLowerCase() === stockItem.name.toLowerCase() && stockItem.status !== "sold")
+    );
+
+    if (isSoldInThisBill && stockItem.status !== "sold") {
+      hasChanges = true;
+      const oldStatus = stockItem.status;
+      const oldLocation = stockItem.trayLocation;
+      const newLocation = `Sold / Delivered (Invoice #${invoiceNumber})`;
+
+      recordStockMovement(
+        {
+          stockItemId: stockItem.id,
+          sku: stockItem.sku,
+          productName: stockItem.name,
+          fromStatus: oldStatus,
+          toStatus: "sold",
+          fromLocation: oldLocation,
+          toLocation: newLocation,
+          reason: `Sold on Tax Invoice #${invoiceNumber}`,
+          performedById: operator.id,
+          performedByName: operator.fullName,
+          performedByRole: operator.role,
+        },
+        tenantId
+      );
+
+      return {
+        ...stockItem,
+        status: "sold" as StockStatus,
+        trayLocation: newLocation,
+      };
+    }
+
+    return stockItem;
+  });
+
+  if (hasChanges) {
+    saveStockItems(updatedStock, tenantId);
+  }
+
+  return updatedStock;
+}
+
+/**
+ * Old-Gold Scrap Lot Dual Entry:
+ * When customers exchange scrap or old jewellery, generates a serialized unrefined lot
+ * in the inventory vault under "Vault Safe #Melting Box" with 24ct fine metal equivalence.
+ */
+export function ingestOldGoldScrap(
+  oldGoldItems: OldGoldExchangeItem[],
+  invoiceNumber: string,
+  customerName: string,
+  user?: { id: string; fullName: string; role: string },
+  tenantId?: string
+): StockItem[] {
+  if (!oldGoldItems || oldGoldItems.length === 0) {
+    return getSavedStock(tenantId);
+  }
+
+  const currentStock = getSavedStock(tenantId);
+  const operator = user || {
+    id: "system-pos",
+    fullName: "Billing Counter Terminal",
+    role: "SALESPERSON",
+  };
+
+  const newScrapPieces: StockItem[] = [];
+
+  for (const og of oldGoldItems) {
+    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+    const scrapSku = `SCRAP-OG-${randomSuffix}`;
+    const scrapBarcode = `89099${Math.floor(10000 + Math.random() * 90000)}`;
+
+    const purityKey =
+      og.assessedPurityPercentage >= 90
+        ? "22K"
+        : og.assessedPurityPercentage >= 75
+        ? "18K"
+        : "14K";
+
+    const scrapItem: StockItem = {
+      id: `scrap-${Date.now()}-${randomSuffix}`,
+      sku: scrapSku,
+      barcode: scrapBarcode,
+      name: `Old Scrap: ${og.description}`,
+      category: "Other",
+      metal: og.metal,
+      purity: purityKey as any,
+      purityDisplay: `${og.assessedPurityPercentage}% Touch (Assessed)`,
+      grossWeight: og.grossWeight,
+      stoneWeight: og.stoneDeduction,
+      otherDeductions: 0,
+      netWeight: og.netWeight,
+      fineWeight: Number(og.fineWeight.toFixed(3)),
+      hsnCode: "7113",
+      acquisitionCost: og.totalExchangeCredit,
+      defaultMakingType: "percentage",
+      defaultMakingValue: 0,
+      trayLocation: "Vault Safe #Melting Box",
+      supplierName: `Customer Exchange (${customerName || "Walk-in"})`,
+      status: "in_vault",
+      dateAdded: new Date().toISOString().split("T")[0],
+      notes: `Exchange Lot from Invoice #${invoiceNumber}. Assessed Touch: ${og.assessedPurityPercentage}%, Melt Deduct: ${og.meltDeductionPercentage}%`,
+    };
+
+    recordStockMovement(
+      {
+        stockItemId: scrapItem.id,
+        sku: scrapItem.sku,
+        productName: scrapItem.name,
+        fromStatus: "in_vault",
+        toStatus: "in_vault",
+        fromLocation: `Customer Ingestion (${customerName})`,
+        toLocation: "Vault Safe #Melting Box",
+        reason: `Old Gold Scrap Exchange on Invoice #${invoiceNumber}`,
+        performedById: operator.id,
+        performedByName: operator.fullName,
+        performedByRole: operator.role,
+      },
+      tenantId
+    );
+
+    newScrapPieces.push(scrapItem);
+  }
+
+  const updatedStock = [...newScrapPieces, ...currentStock];
+  saveStockItems(updatedStock, tenantId);
+  return updatedStock;
 }

@@ -36,9 +36,9 @@
 * **Status**: 🟢 **Completed & Integrated (Milestone 3)**
 
 ### 🟢 Module 5: Billing & POS (Point of Sale)
-* **Current State**: Ultra-polished `CounterCalculator.tsx`, `CounterQuickCartDrawer.tsx`, `BillingWorkspace.tsx`, and `TaxInvoiceModal.tsx`. 1-click round-off, WhatsApp quotation, split payments (Cash/UPI/Card), GST tax breakdown, and thermal receipt print.
-* **Target State**: Server-side atomic transaction pipeline that locks stock items, marks them as sold, posts payments, logs customer ledger, and records accounting vouchers in a single database commit.
-* **Status**: 🟡 **Advanced Frontend Ready** $\rightarrow$ *Target: Milestone 4*
+* **Current State**: Full billing and checkout transaction pipeline. Split payment matrix (Cash + UPI with UTR + Card with Auth + Customer Credit/Udhar) with live allocation meters and auto-balance. Atomic physical stock locking (`lockInvoicedStockItems`) moving items immediately to "sold" with immutable audit movement logs. Automatic Old-Gold Scrap Lot Dual Entry (`ingestOldGoldScrap`) creating unrefined bullion scrap pieces in "Vault Safe #Melting Box". Double-selling prevention locking sold ornaments. Professional WhatsApp invoice sharing (`TaxInvoiceModal.tsx`) and Old-Gold Exchange Voucher breakdown.
+* **Target State**: Thermal printing native driver hooks and optional e-Way Bill generation for wholesale amounts.
+* **Status**: 🟢 **Completed & Integrated (Milestone 4)**
 
 ### 🔴 Module 6: Purchase & Suppliers
 * **Current State**: Supplier profile mock data seeded in inventory store.

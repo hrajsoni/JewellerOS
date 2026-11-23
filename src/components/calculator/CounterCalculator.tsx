@@ -54,6 +54,10 @@ export interface PreloadedCalcData {
   silverPurity?: SilverPurityKey;
   makingValue?: number | string;
   makingType?: MakingChargeType;
+  stockItemId?: string;
+  sku?: string;
+  barcode?: string;
+  status?: string;
 }
 
 export interface CounterCalculatorProps {
@@ -238,7 +242,14 @@ Fine Gold Eq (24ct): ${formatGrams(calculationResult.fineWeight)} = ${formatINR(
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const isSoldItem = preloadedItem?.status === "sold";
+
   const handleAddToCartClick = () => {
+    if (isSoldItem) {
+      alert("This serialized ornament is already sold and locked in the inventory vault. Cannot add to cart.");
+      return;
+    }
+
     const currentPurityKey = metal === "gold" ? goldPurity : silverPurity;
     const currentPurityDisplay =
       metal === "gold"
@@ -247,6 +258,9 @@ Fine Gold Eq (24ct): ${formatGrams(calculationResult.fineWeight)} = ${formatINR(
 
     const newItem: InvoiceLineItem = {
       id: `item-${Date.now()}`,
+      stockItemId: preloadedItem?.stockItemId,
+      sku: preloadedItem?.sku,
+      barcode: preloadedItem?.barcode,
       name: productName || "Jewellery Ornament",
       metal: metal,
       purity: currentPurityKey,
@@ -387,6 +401,26 @@ Fine Gold Eq (24ct): ${formatGrams(calculationResult.fineWeight)} = ${formatINR(
           </button>
         </div>
       </div>
+
+      {/* Sold Inventory Lock Banner */}
+      {isSoldItem && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <Lock size={18} className="shrink-0 text-red-400" />
+            <div>
+              <span className="font-bold uppercase tracking-wider block">
+                🔒 Locked Inventory Piece · Marked as Sold
+              </span>
+              <p className="text-[11px] text-red-300/80 mt-0.5">
+                Physical ornament {preloadedItem?.sku || preloadedItem?.productName} was finalized on a tax invoice and locked in the inventory vault. Double-selling this serial number is blocked.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded bg-red-500/20 text-red-300 font-mono text-[10px] font-bold shrink-0">
+            STATUS: SOLD
+          </span>
+        </div>
+      )}
 
       {/* Main Layout: Precision Input Console (Left) + Minimalist Luxury Result (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -936,13 +970,16 @@ Fine Gold Eq (24ct): ${formatGrams(calculationResult.fineWeight)} = ${formatINR(
             <div className="space-y-2.5 pt-2">
               {/* Primary: Add to Active Cart */}
               <GlassButton
-                variant="primary"
+                variant={isSoldItem ? "secondary" : "primary"}
                 size="lg"
-                className="w-full text-xs sm:text-sm font-semibold shadow-lg"
-                icon={<Plus size={16} />}
+                className={`w-full text-xs sm:text-sm font-semibold shadow-lg ${
+                  isSoldItem ? "opacity-60 cursor-not-allowed border-red-500/30 text-red-300" : ""
+                }`}
+                icon={isSoldItem ? <Lock size={16} className="text-red-400" /> : <Plus size={16} />}
                 onClick={handleAddToCartClick}
+                disabled={isSoldItem}
               >
-                + Add to Active Cart & Weigh More
+                {isSoldItem ? "Locked (Sold Inventory Item)" : "+ Add to Active Cart & Weigh More"}
               </GlassButton>
 
               {/* Secondary Row: Quick Cash Bill & Open Cart */}
@@ -950,12 +987,19 @@ Fine Gold Eq (24ct): ${formatGrams(calculationResult.fineWeight)} = ${formatINR(
                 <GlassButton
                   variant="secondary"
                   size="sm"
-                  icon={<Zap size={14} className="text-[#DFC488]" />}
+                  icon={
+                    isSoldItem && cartItems.length === 0 ? (
+                      <Lock size={14} className="text-red-400" />
+                    ) : (
+                      <Zap size={14} className="text-[#DFC488]" />
+                    )
+                  }
+                  disabled={isSoldItem && cartItems.length === 0}
                   onClick={() => {
                     // If cart has items, bill all cart items; otherwise bill this current single item
                     if (cartItems.length > 0) {
                       onQuickCashBill(applyGst);
-                    } else {
+                    } else if (!isSoldItem) {
                       handleAddToCartClick();
                       onQuickCashBill(applyGst);
                     }

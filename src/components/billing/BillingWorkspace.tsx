@@ -85,6 +85,15 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
   const [primaryPaymentMode, setPrimaryPaymentMode] = useState<PaymentMethod>("UPI");
   const [paymentRef, setPaymentRef] = useState("UPI/GPay 489218");
 
+  // Split Payment Matrix (Cash + UPI + Card + Customer Ledger)
+  const [isSplitPayment, setIsSplitPayment] = useState<boolean>(false);
+  const [cashPart, setCashPart] = useState<string>("");
+  const [upiPart, setUpiPart] = useState<string>("");
+  const [upiRef, setUpiRef] = useState<string>("");
+  const [cardPart, setCardPart] = useState<string>("");
+  const [cardRef, setCardRef] = useState<string>("");
+  const [creditPart, setCreditPart] = useState<string>("");
+
   // Sum of jewellery items
   const itemsSubtotal = draftItems.reduce((acc, item) => acc + item.totalBeforeTax, 0);
 
@@ -101,6 +110,14 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
   const gstRate = 3;
   const gstAmount = applyGst ? Math.round(taxableAmount * 0.03) : 0;
   const grandTotal = taxableAmount + gstAmount;
+
+  // Split calculations
+  const cashNum = parseFloat(cashPart) || 0;
+  const upiNum = parseFloat(upiPart) || 0;
+  const cardNum = parseFloat(cardPart) || 0;
+  const creditNum = parseFloat(creditPart) || 0;
+  const splitTotalPaid = cashNum + upiNum + cardNum + creditNum;
+  const splitBalanceDue = Math.max(0, grandTotal - splitTotalPaid);
 
   const handleAddOldGold = () => {
     const gross = parseFloat(ogWeight) || 0;
@@ -142,6 +159,67 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
     const invoiceNumber = `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     const invoiceDate = new Date().toISOString().split("T")[0];
 
+    let payments: PaymentRecord[] = [];
+    let totalPaid = 0;
+    let balanceDue = 0;
+
+    if (isSplitPayment) {
+      if (cashNum > 0) {
+        payments.push({
+          method: "Cash",
+          amount: cashNum,
+          transactionRef: "Cash at counter",
+        });
+      }
+      if (upiNum > 0) {
+        payments.push({
+          method: "UPI",
+          amount: upiNum,
+          transactionRef: upiRef.trim() || "UPI / QR Settlement",
+        });
+      }
+      if (cardNum > 0) {
+        payments.push({
+          method: "Card",
+          amount: cardNum,
+          transactionRef: cardRef.trim() || "POS Card Swipe",
+        });
+      }
+      if (creditNum > 0) {
+        payments.push({
+          method: "Customer Credit",
+          amount: creditNum,
+          transactionRef: "Customer Ledger / Udhar Khata",
+        });
+      }
+
+      if (payments.length === 0) {
+        payments.push({
+          method: "Cash",
+          amount: grandTotal,
+          transactionRef: "Cash Counter Payment",
+        });
+        totalPaid = grandTotal;
+        balanceDue = 0;
+      } else {
+        totalPaid = splitTotalPaid;
+        balanceDue = splitBalanceDue;
+      }
+    } else {
+      payments = [
+        {
+          method: primaryPaymentMode,
+          amount: grandTotal,
+          transactionRef: paymentRef,
+        },
+      ];
+      totalPaid = grandTotal;
+      balanceDue = 0;
+    }
+
+    const status: "paid" | "partial" | "pending" =
+      balanceDue === 0 ? "paid" : totalPaid > 0 ? "partial" : "pending";
+
     const finalized: FinalizedInvoice = {
       id: `inv-${Date.now()}`,
       invoiceNumber,
@@ -166,16 +244,10 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
       totalGst: gstAmount,
       roundoff: 0,
       grandTotal,
-      payments: [
-        {
-          method: primaryPaymentMode,
-          amount: grandTotal,
-          transactionRef: paymentRef,
-        },
-      ],
-      totalPaid: grandTotal,
-      balanceDue: 0,
-      status: "paid",
+      payments,
+      totalPaid,
+      balanceDue,
+      status,
       shopSnapshot: shopDetails,
     };
 
@@ -463,26 +535,177 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
               )}
             </div>
 
-            {/* Payment Method Selector */}
-            <div className="space-y-2 pt-2 border-t border-white/[0.06]">
-              <span className="text-[11px] font-medium text-[var(--text-secondary)] block">
-                Payment Method
-              </span>
-              <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg bg-black/30 border border-white/[0.06]">
-                {(["UPI", "Cash", "Card"] as PaymentMethod[]).map((mode) => (
+            {/* Payment Method Selector & Split Payment Matrix */}
+            <div className="space-y-3 pt-3 border-t border-white/[0.06]">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Payment Method
+                </span>
+                {/* Single vs Split Toggle */}
+                <div className="inline-flex p-0.5 rounded-lg bg-black/40 border border-white/[0.06] text-[10px]">
                   <button
-                    key={mode}
-                    onClick={() => setPrimaryPaymentMode(mode)}
-                    className={`py-1.5 rounded text-xs font-medium transition-all ${
-                      primaryPaymentMode === mode
-                        ? "bg-[#C5A059] text-[#08090C] font-semibold"
-                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    type="button"
+                    onClick={() => setIsSplitPayment(false)}
+                    className={`px-2 py-1 rounded transition-all ${
+                      !isSplitPayment
+                        ? "bg-[#C5A059] text-[#08090C] font-bold"
+                        : "text-[var(--text-tertiary)] hover:text-white"
                     }`}
                   >
-                    {mode}
+                    Single Mode
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSplitPayment(true);
+                      if (!cashPart && !upiPart && !cardPart && !creditPart) {
+                        setCashPart(grandTotal.toString());
+                      }
+                    }}
+                    className={`px-2 py-1 rounded transition-all ${
+                      isSplitPayment
+                        ? "bg-[#C5A059] text-[#08090C] font-bold"
+                        : "text-[var(--text-tertiary)] hover:text-white"
+                    }`}
+                  >
+                    Split Payment
+                  </button>
+                </div>
               </div>
+
+              {!isSplitPayment ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-4 gap-1.5 p-1 rounded-lg bg-black/30 border border-white/[0.06]">
+                    {(["UPI", "Cash", "Card", "Bank Transfer"] as PaymentMethod[]).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setPrimaryPaymentMode(mode)}
+                        className={`py-1.5 rounded text-xs font-medium transition-all ${
+                          primaryPaymentMode === mode
+                            ? "bg-[#C5A059] text-[#08090C] font-semibold shadow-sm"
+                            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+
+                  <GlassInput
+                    label="Transaction / Reference Note"
+                    placeholder="e.g. UPI Ref / Cheque No / Card Auth"
+                    value={paymentRef}
+                    onChange={(e) => setPaymentRef(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-3 p-3 rounded-xl bg-black/30 border border-white/[0.06]">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <GlassInput
+                      label="Cash (रोकड़)"
+                      type="number"
+                      prefixSymbol="₹"
+                      placeholder="0"
+                      value={cashPart}
+                      onChange={(e) => setCashPart(e.target.value)}
+                    />
+                    <div className="space-y-1">
+                      <GlassInput
+                        label="UPI / QR (ऑनलाइन)"
+                        type="number"
+                        prefixSymbol="₹"
+                        placeholder="0"
+                        value={upiPart}
+                        onChange={(e) => setUpiPart(e.target.value)}
+                      />
+                      {upiNum > 0 && (
+                        <input
+                          type="text"
+                          placeholder="UPI Ref / UTR (e.g. 489218)"
+                          value={upiRef}
+                          onChange={(e) => setUpiRef(e.target.value)}
+                          className="w-full text-[11px] px-2 py-1 rounded bg-black/40 border border-white/[0.08] text-[var(--text-primary)] focus:border-[#C5A059] focus:outline-none"
+                        />
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <GlassInput
+                        label="Card / POS Machine"
+                        type="number"
+                        prefixSymbol="₹"
+                        placeholder="0"
+                        value={cardPart}
+                        onChange={(e) => setCardPart(e.target.value)}
+                      />
+                      {cardNum > 0 && (
+                        <input
+                          type="text"
+                          placeholder="Card Auth / Slip Ref"
+                          value={cardRef}
+                          onChange={(e) => setCardRef(e.target.value)}
+                          className="w-full text-[11px] px-2 py-1 rounded bg-black/40 border border-white/[0.08] text-[var(--text-primary)] focus:border-[#C5A059] focus:outline-none"
+                        />
+                      )}
+                    </div>
+                    <GlassInput
+                      label="Customer Ledger / Udhar"
+                      type="number"
+                      prefixSymbol="₹"
+                      placeholder="0"
+                      value={creditPart}
+                      onChange={(e) => setCreditPart(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Live Allocation Meter */}
+                  <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.05] space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[var(--text-secondary)]">Total Allocated:</span>
+                      <span className="font-mono font-semibold text-[var(--text-primary)]">
+                        {formatINR(splitTotalPaid)} / {formatINR(grandTotal)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span>Settlement Status:</span>
+                      {splitTotalPaid === grandTotal ? (
+                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                          <CheckCircle2 size={12} /> Exact Full Settlement
+                        </span>
+                      ) : splitTotalPaid < grandTotal ? (
+                        <span className="text-amber-400 font-semibold">
+                          Due: {formatINR(splitBalanceDue)}
+                        </span>
+                      ) : (
+                        <span className="text-coral-400 font-semibold">
+                          Excess: +{formatINR(splitTotalPaid - grandTotal)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quick auto-balance button */}
+                    {splitBalanceDue > 0 && (
+                      <div className="pt-1 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCashPart((cashNum + splitBalanceDue).toString())}
+                          className="text-[10px] text-[#DFC488] hover:underline"
+                        >
+                          + Put remaining {formatINR(splitBalanceDue)} in Cash
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setUpiPart((upiNum + splitBalanceDue).toString())}
+                          className="text-[10px] text-[#DFC488] hover:underline"
+                        >
+                          + in UPI
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Actions */}

@@ -39,7 +39,13 @@ import {
 import { formatINR } from "../lib/formatters";
 import { InventoryManager } from "../components/inventory/InventoryManager";
 import { StockItem } from "../modules/inventory/types";
-import { getSavedStock, saveStockItems, updateStockItemStatus } from "../modules/inventory/store";
+import {
+  getSavedStock,
+  saveStockItems,
+  updateStockItemStatus,
+  lockInvoicedStockItems,
+  ingestOldGoldScrap,
+} from "../modules/inventory/store";
 import { CustomerLedger } from "../components/customers/CustomerLedger";
 import { Customer, NewCustomerInput } from "../modules/customers/types";
 import {
@@ -306,6 +312,27 @@ function WorkspaceMain() {
   };
 
   const handleFinalizeBill = (finalized: FinalizedInvoice) => {
+    // 1. Lock invoiced stock items atomically
+    const lockedStock = lockInvoicedStockItems(
+      finalized.items,
+      finalized.invoiceNumber,
+      user,
+      activeTenant.id
+    );
+
+    // 2. Ingest Old Gold scrap lots if present
+    let finalStock = lockedStock;
+    if (finalized.oldGoldExchange && finalized.oldGoldExchange.length > 0) {
+      finalStock = ingestOldGoldScrap(
+        finalized.oldGoldExchange,
+        finalized.invoiceNumber,
+        finalized.customer.name,
+        user,
+        activeTenant.id
+      );
+    }
+    setStockItems(finalStock);
+
     saveNewInvoice(finalized, activeTenant.id);
     setInvoices([finalized, ...invoices]);
     setCurrentInvoiceData(finalized);
@@ -328,9 +355,10 @@ function WorkspaceMain() {
     const grandTotal = subtotal + gstAmount;
 
     const now = new Date();
+    const invoiceNumber = `INV-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newInvoice: FinalizedInvoice = {
       id: `inv-${Date.now()}`,
-      invoiceNumber: `INV-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      invoiceNumber,
       invoiceDate: now.toISOString(),
       createdAt: now.toISOString(),
       customer: {
@@ -370,6 +398,15 @@ function WorkspaceMain() {
       },
     };
 
+    // Lock invoiced stock items atomically
+    const lockedStock = lockInvoicedStockItems(
+      newInvoice.items,
+      newInvoice.invoiceNumber,
+      user,
+      activeTenant.id
+    );
+    setStockItems(lockedStock);
+
     saveNewInvoice(newInvoice, activeTenant.id);
     setInvoices([newInvoice, ...invoices]);
     setCurrentInvoiceData(newInvoice);
@@ -398,9 +435,10 @@ function WorkspaceMain() {
     const grandTotal = taxableAmount + gstAmount;
 
     const now = new Date();
+    const invoiceNumber = `INV-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newInvoice: FinalizedInvoice = {
       id: `inv-${Date.now()}`,
-      invoiceNumber: `INV-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      invoiceNumber,
       invoiceDate: now.toISOString(),
       createdAt: now.toISOString(),
       customer: cust,
@@ -434,6 +472,27 @@ function WorkspaceMain() {
       },
     };
 
+    // 1. Lock invoiced stock items atomically
+    const lockedStock = lockInvoicedStockItems(
+      newInvoice.items,
+      newInvoice.invoiceNumber,
+      user,
+      activeTenant.id
+    );
+
+    // 2. Ingest Old Gold scrap lots if present
+    let finalStock = lockedStock;
+    if (ogItems.length > 0) {
+      finalStock = ingestOldGoldScrap(
+        ogItems,
+        newInvoice.invoiceNumber,
+        newInvoice.customer.name,
+        user,
+        activeTenant.id
+      );
+    }
+    setStockItems(finalStock);
+
     saveNewInvoice(newInvoice, activeTenant.id);
     setInvoices([newInvoice, ...invoices]);
     setCurrentInvoiceData(newInvoice);
@@ -459,6 +518,10 @@ function WorkspaceMain() {
       silverPurity: item.metal === "silver" ? (item.purity as any) : undefined,
       makingValue: item.defaultMakingValue,
       makingType: item.defaultMakingType,
+      stockItemId: item.id,
+      sku: item.sku,
+      barcode: item.barcode,
+      status: item.status,
     });
     setActiveTab("/calculator");
   };

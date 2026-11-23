@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { GlassDialog } from "../glass/GlassDialog";
 import { GlassButton } from "../glass/GlassButton";
 import { formatINR, formatGrams } from "../../lib/formatters";
-import { Printer, MapPin, Phone } from "lucide-react";
+import { Printer, MapPin, Phone, MessageCircle, CheckCircle2, ShieldCheck } from "lucide-react";
 import { FinalizedInvoice } from "../../modules/invoicing/types";
 
 export interface TaxInvoiceModalProps {
@@ -31,6 +31,67 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
     address: "142 Sarafa Bazar, M.I. Road, Jaipur, RJ 302001",
     phone: "+91 94140 12345",
     gstin: "08AAAAJ1234F1Z8",
+  };
+
+  const handleShareWhatsApp = () => {
+    const cleanPhone = invoiceData.customer.phone.replace(/[^0-9]/g, "");
+    const itemsText = invoiceData.items
+      .map(
+        (item, idx) =>
+          `${idx + 1}. *${item.name}*\n   Weight: ${formatGrams(item.grossWeight)} (${item.purityDisplay || item.purity})\n   Making: +${formatINR(item.makingCharges)} | Subtotal: ${formatINR(item.totalBeforeTax)}`
+      )
+      .join("\n\n");
+
+    const ogText =
+      invoiceData.oldGoldExchange && invoiceData.oldGoldExchange.length > 0
+        ? `\n\n*OLD GOLD EXCHANGE:* \n` +
+          invoiceData.oldGoldExchange
+            .map(
+              (og) =>
+                `• ${og.description} (${formatGrams(og.netWeight)} @ ${og.assessedPurityPercentage}% touch): -${formatINR(og.totalExchangeCredit)}`
+            )
+            .join("\n") +
+          `\nTotal Exchange Credit: -${formatINR(invoiceData.oldGoldTotalCredit)}`
+        : "";
+
+    const paymentsText = invoiceData.payments
+      .map(
+        (p) =>
+          `• ${p.method}${p.transactionRef ? ` (${p.transactionRef})` : ""}: ${formatINR(p.amount)}`
+      )
+      .join("\n");
+
+    const message =
+      `*TAX INVOICE · ${shop.name.toUpperCase()}*\n` +
+      `Invoice: *${invoiceData.invoiceNumber}* | Date: ${invoiceData.invoiceDate}\n` +
+      `Customer: *${invoiceData.customer.name}* (${invoiceData.customer.phone})\n` +
+      `--------------------------------\n` +
+      `*PURCHASED ORNAMENTS:*\n` +
+      `${itemsText}` +
+      `${ogText}\n` +
+      `--------------------------------\n` +
+      `Items Subtotal: ${formatINR(invoiceData.itemsSubtotal)}\n` +
+      (invoiceData.discountTotal > 0 ? `Concession: -${formatINR(invoiceData.discountTotal)}\n` : "") +
+      (invoiceData.gstPercentage > 0 ? `GST (3%): +${formatINR(invoiceData.totalGst)}\n` : "") +
+      `*GRAND TOTAL: ${formatINR(invoiceData.grandTotal)}*\n` +
+      `--------------------------------\n` +
+      `*PAYMENT DETAILS:*\n` +
+      `${paymentsText}\n` +
+      `Total Paid: ${formatINR(invoiceData.totalPaid)}\n` +
+      (invoiceData.balanceDue > 0
+        ? `*Balance Due: ${formatINR(invoiceData.balanceDue)}*\n`
+        : `*Status: FULLY PAID (चुक्ता)*\n`) +
+      `--------------------------------\n` +
+      `*${shop.name}*\n` +
+      `${shop.address}\n` +
+      `Phone: ${shop.phone} · GSTIN: ${shop.gstin}\n` +
+      `_Govt Approved BIS Hallmarked Jewellery_`;
+
+    const target = cleanPhone.length === 10 ? "91" + cleanPhone : cleanPhone || "";
+    const url = target
+      ? `https://wa.me/${target}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(url, "_blank");
   };
 
   return (
@@ -68,6 +129,15 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <GlassButton
+            variant="ghost"
+            size="sm"
+            onClick={handleShareWhatsApp}
+            icon={<MessageCircle size={15} className="text-[#25D366]" />}
+            className="text-[#25D366] hover:bg-[#25D366]/10 font-semibold text-xs"
+          >
+            Share on WhatsApp
+          </GlassButton>
           <GlassButton
             variant="primary"
             size="sm"
@@ -206,9 +276,91 @@ export const TaxInvoiceModal: React.FC<TaxInvoiceModalProps> = ({
           </tbody>
         </table>
 
-        {/* Totals Summary */}
-        <div className="flex justify-end pt-3 border-t-2 border-[#1C1B18]">
-          <div className="w-64 space-y-1.5 text-xs font-mono">
+        {/* Dedicated Old Gold Exchange Voucher (if applicable) */}
+        {invoiceData.oldGoldExchange && invoiceData.oldGoldExchange.length > 0 && (
+          <div className="mb-5 p-3.5 rounded-lg bg-[#F3F8F5] border border-[#CDE3D5] text-xs space-y-2">
+            <div className="flex items-center justify-between pb-1.5 border-b border-[#CDE3D5]">
+              <span className="font-bold text-[#1E5631] uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <ShieldCheck size={14} /> Old Gold Exchange Voucher (पुराने आभूषण विनिमय वाउचर)
+              </span>
+              <span className="text-[10px] text-[#2D6A4F] font-medium">
+                Adjusted against Invoice #{invoiceData.invoiceNumber}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead>
+                  <tr className="text-[#2D6A4F] border-b border-[#D8EADB]">
+                    <th className="py-1">Scrap Description</th>
+                    <th className="py-1 text-right">Gross Wt</th>
+                    <th className="py-1 text-right">Deduction</th>
+                    <th className="py-1 text-right">Net Wt</th>
+                    <th className="py-1 text-center">Touch %</th>
+                    <th className="py-1 text-right">Fine (24ct)</th>
+                    <th className="py-1 text-right">Credit Value</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E2EFE5]">
+                  {invoiceData.oldGoldExchange.map((og) => (
+                    <tr key={og.id}>
+                      <td className="py-1.5 font-medium text-[#1E5631]">{og.description}</td>
+                      <td className="py-1.5 text-right font-mono">{formatGrams(og.grossWeight)}</td>
+                      <td className="py-1.5 text-right font-mono text-[#888]">−{formatGrams(og.stoneDeduction)}</td>
+                      <td className="py-1.5 text-right font-mono font-medium">{formatGrams(og.netWeight)}</td>
+                      <td className="py-1.5 text-center font-bold text-[#2D6A4F]">{og.assessedPurityPercentage}%</td>
+                      <td className="py-1.5 text-right font-mono font-semibold">{formatGrams(og.fineWeight)}</td>
+                      <td className="py-1.5 text-right font-mono font-bold text-[#1E5631]">−{formatINR(og.totalExchangeCredit)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-right pt-1 font-bold text-xs text-[#1E5631]">
+              Total Exchange Credit Allowed: −{formatINR(invoiceData.oldGoldTotalCredit)}
+            </div>
+          </div>
+        )}
+
+        {/* Totals & Payments Dual Columns */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-3 border-t-2 border-[#1C1B18]">
+          {/* Left: Payments Received Breakdown */}
+          <div className="p-3 rounded-lg bg-[#F9F8F6] border border-[#EDE8DE] text-xs space-y-2">
+            <span className="font-bold text-[#8C6A22] uppercase tracking-wider text-[10px] block">
+              Settlement & Payment Details:
+            </span>
+            <div className="space-y-1.5 text-xs">
+              {invoiceData.payments && invoiceData.payments.map((p, idx) => (
+                <div key={idx} className="flex justify-between items-center text-[#444]">
+                  <span>
+                    <span className="font-semibold text-[#1C1B18]">{p.method}</span>
+                    {p.transactionRef && (
+                      <span className="text-[10px] text-[#777] ml-1">({p.transactionRef})</span>
+                    )}
+                  </span>
+                  <span className="font-mono font-medium text-[#1C1B18]">
+                    {formatINR(p.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-[#DDD] space-y-1">
+              <div className="flex justify-between text-xs font-semibold text-[#1C1B18]">
+                <span>Total Received:</span>
+                <span className="font-mono">{formatINR(invoiceData.totalPaid)}</span>
+              </div>
+              <div className="flex justify-between text-xs font-bold">
+                <span>Balance Remaining:</span>
+                <span className={`font-mono ${invoiceData.balanceDue > 0 ? "text-amber-800" : "text-emerald-800"}`}>
+                  {invoiceData.balanceDue > 0 ? formatINR(invoiceData.balanceDue) : "₹0 (Fully Paid)"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Financial Totals Summary */}
+          <div className="space-y-1.5 text-xs font-mono">
             <div className="flex justify-between text-[#555]">
               <span>Items Total:</span>
               <span>{formatINR(invoiceData.itemsSubtotal)}</span>
