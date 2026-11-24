@@ -1,0 +1,92 @@
+Module,Feature ID,Feature Name,UI Component,Storage/Logic Layer,Prisma Model,Status,Audit Finding Notes
+Authentication,AUTH-001,Employee PIN Login,LoginModal.tsx,auth/store.ts,User,PARTIAL,Works in browser; uses hardcoded PIN 1234; no server-side bcrypt verification
+Authentication,AUTH-002,Fast Role Switcher,FastRoleSwitcher (TopRateBar.tsx),auth/AuthContext.tsx,None,PASS,Instant role toggle for testing 7 Sarafa staff personas
+Authentication,AUTH-003,RBAC Menu & Tab Guard,RestrictedModuleGuard (page.tsx),auth/permissions.ts,None,PASS,Guards Girvi Karigar Staff Wholesale and Reports tabs
+Authentication,AUTH-004,Sensitive Financial Masking,FinancialOverview.tsx,auth/permissions.ts,None,PARTIAL,Masks purchase cost & margins on frontend; localStorage holds plaintext data
+Authentication,AUTH-005,Staff Directory Management,StaffManager.tsx,staff/store.ts,None,PASS,Creates staff members with designated roles and monthly salaries
+Authentication,AUTH-006,Salary Advance Issuance,StaffManager.tsx,staff/store.ts,None,PASS,Deducts from employee advance balance; records payment history
+Authentication,AUTH-007,Monthly Salary Payment,StaffManager.tsx,staff/store.ts,None,DISCONNECTED,Records salary payment record but does not deduct from Account 1010/1020
+Authentication,AUTH-008,Server Session Tokens & Password Reset,None,None,None,MISSING,No backend JWT/session tokens; no password reset workflow exists
+Dashboard,DASH-001,Executive Sales Turnover Card,FinancialOverview.tsx,invoicing/store.ts,Invoice,PASS,Aggregates finalized invoice revenue and daily sales turnover
+Dashboard,DASH-002,Physical Stock Valuation vs Cost,FinancialOverview.tsx,inventory/store.ts,StockItem,PASS,Computes retail market value vs wholesale acquisition cost
+Dashboard,DASH-003,Unrealized Gross Margin Meter,FinancialOverview.tsx,inventory/store.ts,None,PASS,Accurately computes unrealized profit spread and gross margin %
+Dashboard,DASH-004,Safe Bullion Weight Tally,FinancialOverview.tsx,inventory/store.ts,None,PASS,Aggregates pure fine 24K gold grams and 999 silver grams in vault
+Dashboard,DASH-005,Working Capital Ledger Matrix,FinancialOverview.tsx,accounts/store.ts,Account,PARTIAL,Visualizes working capital components; retail sales do not feed account balances
+Dashboard,DASH-006,Operational Urgent Orders Radar,FinancialOverview.tsx,repairs/store.ts,None,PASS,Tracks pending bridal custom orders and repairs awaiting delivery
+Dashboard,DASH-007,Front-Counter Salesperson Mode,FinancialOverview.tsx,inventory/store.ts,StockItem,PASS,Provides instant barcode gun / SKU search and masks purchase costs
+Metal Rates,RATE-001,Daily Sarafa Board Rates Entry,MetalRatesModal.tsx,rates/store.ts,MetalRate,PASS,Allows entering 24K gold per 10g and 999 silver per kg
+Metal Rates,RATE-002,K/24 Karat Derivation Engine,MetalRatesModal.tsx,rates/store.ts,None,PASS,Exact ratio derivation: 22K (916), 18K (750), 14K (585), 925 silver
+Metal Rates,RATE-003,Old-Gold Exchange Buyback Rates,MetalRatesModal.tsx,rates/store.ts,MetalRate,PASS,Maintains separate purchase/buyback rates for scrap exchange
+Metal Rates,RATE-004,Historical Price Audit Trail,MetalRatesModal.tsx,rates/store.ts,MetalRate,PARTIAL,Records timestamp and employee attribution; uses global storage key (not tenant-scoped)
+Metal Rates,RATE-005,Live Ticker Sync,TopRateBar.tsx,rates/store.ts,None,PASS,Propagates active rates to Top Bar and Counter Calculator
+Inventory,INV-001,Serialized Stock Creation,InventoryManager.tsx,inventory/store.ts,StockItem,PASS,Creates unique physical item with SKU and Code 128 barcode
+Inventory,INV-002,Exact Milligram Deductions,InventoryManager.tsx,inventory/store.ts,StockItem,PASS,Computes Net Weight = Gross - Stone - Other (lac, wax, enamel)
+Inventory,INV-003,Fine Weight (Tunch) Calculation,InventoryManager.tsx,inventory/store.ts,StockItem,PASS,Calculates pure gold equivalent: Net Weight * Purity Fraction
+Inventory,INV-004,Zero-Dependency Barcode Generator,JewelleryBarcodeTag.tsx,inventory/barcode.ts,None,PASS,Generates valid Code 128 vector SVG paths without third-party CDN
+Inventory,INV-005,Printable Thermal Tag Labels,JewelleryBarcodeTag.tsx,settings/store.ts,None,PASS,Renders 50x25mm / 60x30mm thermal label layout for tag printers
+Inventory,INV-006,Barcode Gun Fast Lookup,InventoryManager.tsx,inventory/store.ts,StockItem,PASS,Instant filtering by barcode scan or SKU keystrokes
+Inventory,INV-007,Bulk CSV/Excel Stock Import,BulkStockImportModal.tsx,inventory/store.ts,StockItem,PASS,Parses CSV with header mapping, auto-SKU generation, and weight validation
+Inventory,INV-008,Immutable Stock Movement Ledger,StockMovementModal.tsx,inventory/store.ts,StockMovement,PASS,Records transitions (Showcase -> Vault -> Karigar) with staff attribution
+Inventory,INV-009,Physical Stock Audit Count Reconciler,None,None,None,MISSING,No UI or store for physical shelf count vs system count discrepancy reconciliation
+Billing & POS,POS-001,Retail Tax Invoice Generator,BillingWorkspace.tsx,invoicing/store.ts,Invoice,PASS,Calculates metal value, making charges, stone value, GST, and grand total
+Billing & POS,POS-002,Scan to Cart & Counter POS,BillingWorkspace.tsx,inventory/store.ts,StockItem,PASS,Adds scanned item to invoice draft with locked weight and making charges
+Billing & POS,POS-003,Split Payment Matrix,BillingWorkspace.tsx,invoicing/store.ts,Payment,PASS,Distributes payment across Cash, UPI (with UTR), Card (with Auth), Ledger Credit
+Billing & POS,POS-004,Atomic Stock Locking on Sale,BillingWorkspace.tsx,inventory/store.ts,StockItem,PARTIAL,Marks item sold and updates location; name fallback risks selling duplicate-named items
+Billing & POS,POS-005,Old-Gold Scrap Lot Dual Entry,BillingWorkspace.tsx,inventory/store.ts,StockItem,PASS,Automatically creates unrefined scrap bullion item in Vault Safe #Melting Box
+Billing & POS,POS-006,Double-Selling Prevention,BillingWorkspace.tsx,inventory/store.ts,StockItem,PASS,Checks item status; prevents already-sold items from being re-billed
+Billing & POS,POS-007,A4 & Thermal Invoice Formatter,TaxInvoiceModal.tsx,invoicing/store.ts,None,PASS,Renders professional tax invoice with BIS HUID hallmark and bank details
+Billing & POS,POS-008,1-Click WhatsApp Invoice Share,TaxInvoiceModal.tsx,invoicing/store.ts,None,PASS,Generates formatted URL-encoded WhatsApp text with itemized bill breakdown
+Billing & POS,POS-009,Automatic Accounts Ledger Posting,BillingWorkspace.tsx,accounts/store.ts,JournalEntry,DISCONNECTED,Finalizing invoice does not credit Account 1010/1020/1030 or 3010/2040
+Billing & POS,POS-010,Sales Returns & Credit Notes,None,None,None,MISSING,No dedicated workflow to process sales returns, re-stock items, and issue credit notes
+Purchases,PUR-001,Supplier Profile Management,PurchaseManager.tsx,suppliers/store.ts,Supplier,PASS,Maintains supplier name, contact, city, GSTIN, and metal supplied
+Purchases,PUR-002,Multi-Item Purchase Entry,PurchaseManager.tsx,suppliers/store.ts,None,PASS,Captures multi-item wholesale bills with 3% ITC GST calculation
+Purchases,PUR-003,Atomic Stock Inwarding,PurchaseManager.tsx,inventory/store.ts,StockItem,PASS,Automatically generates serialized inventory records with barcodes from purchase
+Purchases,PUR-004,Supplier Payment Vouchers,PurchaseManager.tsx,suppliers/store.ts,None,PASS,Records partial or full payments, reducing outstanding supplier balance
+Purchases,PUR-005,WhatsApp Supplier Statement,PurchaseManager.tsx,suppliers/store.ts,None,PASS,Generates WhatsApp dispatch summarizing total purchased, paid, and balance due
+Purchases,PUR-006,Purchase Accounts Ledger Posting,PurchaseManager.tsx,accounts/store.ts,JournalEntry,DISCONNECTED,Purchases and payments do not update Account 1010/1020 or liability 2010
+Customers,CUST-001,Customer Profile Directory,CustomerLedger.tsx,customers/store.ts,Customer,PASS,Captures name, mobile, address, city, GSTIN, and loyalty tier
+Customers,CUST-002,Section 139A High-Value PAN Check,CustomerLedger.tsx,customers/store.ts,Customer,PASS,Mandatory PAN card warning for invoices >= ₹2,00,000
+Customers,CUST-003,Customer Purchase History,CustomerLedger.tsx,customers/store.ts,Customer,PASS,Tracks total invoices, cumulative INR turnover, and gold/silver weight bought
+Customers,CUST-004,Customer Udhar / Credit Ledger,CustomerLedger.tsx,customers/store.ts,Customer,PASS,Tracks outstanding credit receivables and positive advance balances
+Customers,CUST-005,WhatsApp Customer Statement,CustomerLedger.tsx,customers/store.ts,None,PASS,Dispatches itemized customer account statement via WhatsApp URL
+Karigar,KAR-001,Artisan Directory Management,KarigarManager.tsx,karigar/store.ts,Karigar,PASS,Maintains artisan profile, workshop city, specialty, and balances
+Karigar,KAR-002,Pure Bullion Issue to Karigar,KarigarManager.tsx,karigar/store.ts,KarigarTransaction,DISCONNECTED,Debits karigar gold balance; does not deduct bullion from stock or Account 1040
+Karigar,KAR-003,Ornament Receipt with Ghat Loss,KarigarManager.tsx,karigar/store.ts,KarigarTransaction,DISCONNECTED,Credits karigar gold and adds labour due; does not create finished stock in inventory
+Karigar,KAR-004,Artisan Labour Settlement,KarigarManager.tsx,karigar/store.ts,KarigarTransaction,DISCONNECTED,Reduces labour due; does not credit Account 1010/1020 or record expense
+Karigar,KAR-005,Manufacturing Job Cards,KarigarManager.tsx,karigar/store.ts,None,PASS,Lifecycle tracking (created -> in_production -> hallmarking -> delivered) with HUID
+Karigar,KAR-006,WhatsApp Karigar Hisab Parcha,KarigarManager.tsx,karigar/store.ts,None,PASS,Generates Sarafa bullion hisab statement with pure gold weight and labour dues
+Accounts,ACC-001,Indian Double-Entry Chart of Accounts,AccountsManager.tsx,accounts/store.ts,Account,PASS,Preloaded with Assets 1010-1050, Liabilities 2010-2040, Revenue 3010-3020, Expenses 4010-4040
+Accounts,ACC-002,Petty Shop Expense Book,AccountsManager.tsx,accounts/store.ts,None,PASS,Records shop expenses (chai, packaging, hallmarking, rent) with voucher numbering
+Accounts,ACC-003,Daily Cash Closing (Rokad Milan),AccountsManager.tsx,accounts/store.ts,None,PASS,Computes expected cash vs opening + receipts - payments
+Accounts,ACC-004,Physical Denomination Counter,AccountsManager.tsx,accounts/store.ts,None,PASS,Interactive currency counter (₹500, ₹200, ₹100, ₹50, ₹20, ₹10, coins)
+Accounts,ACC-005,Discrepancy & Tally Detector,AccountsManager.tsx,accounts/store.ts,None,PASS,Flags perfect tally, cash shortage, or cash excess with notes
+Wholesale,WHOLE-001,Consignment Memo Issue (Jangad),WholesaleManager.tsx,wholesale/store.ts,None,PASS,Issues ornaments on approval without tax invoice or GST liability
+Wholesale,WHOLE-002,Atomic Memo Stock Movement,WholesaleManager.tsx,inventory/store.ts,StockMovement,PASS,Updates stock status to 'On Approval Memo' and logs immutable movement
+Wholesale,WHOLE-003,Partial & Full Stock Return,WholesaleManager.tsx,inventory/store.ts,StockMovement,PASS,Returns unsold pieces back to showcase inventory with audit logs
+Wholesale,WHOLE-004,Memo Conversion to Invoice,WholesaleManager.tsx,invoicing/store.ts,Invoice,PARTIAL,Marks memo item invoiced and stock sold; does not create invoice in invoices registry
+Wholesale,WHOLE-005,B2B Partner Exposure Meter,WholesaleManager.tsx,wholesale/store.ts,None,PASS,Tracks active memo value exposure and cumulative purchased turnover
+Wholesale,WHOLE-006,WhatsApp Memo Dispatch Parcha,WholesaleManager.tsx,wholesale/store.ts,None,PASS,Generates Sarafa Trade Dispatch Statement with gram weights and fine equivalents
+Girvi,GIRVI-001,Form 7 Pawn Ticket Generation,GirviManager.tsx,girvi/store.ts,GirviLoan,PASS,Captures customer ID, Aadhaar, sealed packet number, and safe location
+Girvi,GIRVI-002,Monthly Interest Calculation Engine,GirviManager.tsx,girvi/store.ts,GirviLoan,PASS,Exact Indian Sarafa monthly saikda rate (simple & compound) with 1-month minimum
+Girvi,GIRVI-003,Interest Payment Servicing,GirviManager.tsx,girvi/store.ts,None,DISCONNECTED,Records interest installment voucher; does not deposit funds to Account 1010/1020
+Girvi,GIRVI-004,Principal Repayment & Loan Release,GirviManager.tsx,girvi/store.ts,GirviLoan,PASS,Full principal repayment automatically transitions loan status to released
+Girvi,GIRVI-005,WhatsApp Form 7 Ticket Dispatch,GirviManager.tsx,girvi/store.ts,None,PASS,Generates statutory pawn brokering ticket text for WhatsApp delivery
+Repairs,REP-001,Customer Repair Slip Intake,RepairsManager.tsx,repairs/store.ts,None,PASS,Records customer ornament, intake scale weight, defect remarks, and estimated charges
+Repairs,REP-002,Repair Service Lifecycle,RepairsManager.tsx,repairs/store.ts,None,PASS,Advances status: received -> in_repair -> ready_for_delivery -> delivered
+Repairs,REP-003,Custom Bridal Booking Orders,RepairsManager.tsx,repairs/store.ts,None,PASS,Captures target design, gold rate lock, advance deposit (cash/UPI/scrap weight)
+Repairs,REP-004,Rate Lock Protection Engine,RepairsManager.tsx,repairs/store.ts,None,PASS,Enforces rate_fixed_at_booking vs market_rate_on_delivery rule
+Repairs,REP-005,WhatsApp Repair & Booking Alerts,RepairsManager.tsx,repairs/store.ts,None,PASS,Generates repair completion alert and advance deposit receipt vouchers
+Reports,REP-001,Sales & Turnover Analytics,ReportsOverview.tsx,invoicing/store.ts,None,PASS,Time-filtered sales volume, gross/fine gold weights, and payment breakdown
+Reports,REP-002,GSTR-1 HSN 7113 Tax Audit,ReportsOverview.tsx,invoicing/store.ts,None,PASS,Taxable turnover with symmetric 1.5% CGST + 1.5% SGST split and B2B/B2C distribution
+Reports,REP-003,Section 139A High-Value Audit,ReportsOverview.tsx,invoicing/store.ts,None,PASS,Scans invoices >= ₹2,00,000 for mandatory PAN/Aadhaar compliance
+Reports,REP-004,Stock Valuation & Velocity,ReportsOverview.tsx,inventory/store.ts,None,PASS,Category velocity, physical inventory valuation vs acquisition cost, gross margins
+Reports,REP-005,Sarafa Profit & Loss (P&L),ReportsOverview.tsx,accounts/store.ts,None,PASS,Deducts operating shop expenses from making craftsmanship income
+Reports,REP-006,Karigar Bullion Scrap Audit,ReportsOverview.tsx,karigar/store.ts,None,PASS,Audits pure bullion issued vs finished goods received and workshop melting loss
+Reports,REP-007,Government GST Offline Tool JSON Export,None,None,None,MISSING,No direct JSON export for GST Offline Utility or Cleartax schema
+Settings,SETT-001,Showroom Profile & BIS Hallmarking,SettingsManager.tsx,settings/store.ts,Business,PASS,Configures registered business name, BIS license, GSTIN, phone, and address
+Settings,SETT-002,Invoice & Print Configuration,SettingsManager.tsx,settings/store.ts,None,PASS,Sets A4/thermal paper width, invoice numbering prefix, and bank payment details
+Settings,SETT-003,Barcode Thermal Tag Setup,SettingsManager.tsx,settings/store.ts,None,PASS,Customizes mm label dimensions and toggles attributes (gross, net, purity, HUID)
+Settings,SETT-004,Multi-Branch & Vault Allocation,SettingsManager.tsx,settings/store.ts,Branch,PASS,Configures branch codes, counter terminals, and walk-in safe assignments
+Settings,SETT-005,1-Click Tenant JSON Backup Export,SettingsManager.tsx,settings/store.ts,None,PASS,Exports all 14 module collections into version 2.0.0 UTF-8 JSON file
+Settings,SETT-006,1-Click Tenant Database Restore,SettingsManager.tsx,settings/store.ts,None,PASS,Restores complete database snapshot with record count tally validation
+Settings,SETT-007,Automated Cloud Backup Sync,None,None,None,MISSING,No scheduled automated backup sync to AWS S3 or Google Drive bucket

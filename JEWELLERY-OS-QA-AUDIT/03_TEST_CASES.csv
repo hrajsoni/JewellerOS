@@ -1,0 +1,70 @@
+Test Suite,Test Case ID,Test Description,Input Parameters,Expected Outcome,Actual Outcome,Execution Type,Result
+Pricing Engine,TC-PRC-001,10g 18K @ 150000/10g 0% making,10g 18K rate ₹150000 0% making,Metal ₹112500 Making ₹0 Total ₹112500,Metal ₹112500 Making ₹0 Total ₹112500,Automated Unit,PASS
+Pricing Engine,TC-PRC-002,10g 18K @ 150000/10g 18% making,10g 18K rate ₹150000 18% making,Metal ₹112500 Making ₹20250 Total ₹132750,Metal ₹112500 Making ₹20250 Total ₹132750,Automated Unit,PASS
+Pricing Engine,TC-PRC-003,10g 18K @ 150000/10g ₹500/g making,10g 18K rate ₹150000 ₹500/g making,Metal ₹112500 Making ₹5000 Total ₹117500,Metal ₹112500 Making ₹5000 Total ₹117500,Automated Unit,PASS
+Pricing Engine,TC-PRC-004,10g 22K (150000/24*22) no making,10g 22K derived rate ₹137500,Total ₹137500 with 0 paise drift,Total ₹137500 with 0 paise drift,Automated Unit,PASS
+Pricing Engine,TC-PRC-005,Harshit Notebook 10g 22K 18% making,10g 22K derived rate ₹137500 18% making,Metal ₹137500 Making ₹24750 Total ₹162250,Metal ₹137500 Making ₹24750 Total ₹162250,Automated Unit,PASS
+Pricing Engine,TC-PRC-006,10g 23K (95.8333%) no making,10g 23K benchmark ₹150000,Total ₹143750,Total ₹143750,Automated Unit,PASS
+Pricing Engine,TC-PRC-007,Zero or negative weight validation,Gross weight 0g or -5g,Validation error rejected before calc,Rejected correctly,Automated Unit,PASS
+Pricing Engine,TC-PRC-008,Missing metal rate handling,Rate = 0 or undefined,Flagged incomplete; calculation blocked,Blocked correctly,Automated Unit,PASS
+Pricing Engine,TC-PRC-009,Stone weight deduction from billable,Gross 10g stone 0.5g,Billable net weight = 9.5g,Billable net weight = 9.5g,Automated Unit,PASS
+Pricing Engine,TC-PRC-010,Cost wastage customer price isolation,6% artisan wastage,Customer price unchanged ₹132750,Customer price unchanged,Automated Unit,PASS
+Pricing Engine,TC-PRC-011,Silver calculator 925 purity kg basis,100g silver @ ₹95000/kg 925 purity,Base ₹8787.50 making applied accurately,Base ₹8787.50,Automated Unit,PASS
+Pricing Engine,TC-PRC-012,Gross margin & profit arithmetic,Selling ₹132750 cost ₹121500,Gross profit ₹11250 margin 8.47%,Profit ₹11250 margin 8.47%,Automated Unit,PASS
+Metal Rates,TC-RAT-001,24K Benchmark Derivation,24K = ₹150000,22K=₹137500 18K=₹112500 14K=₹87500,22K=₹137500 18K=₹112500 14K=₹87500,Automated Unit,PASS
+Metal Rates,TC-RAT-002,Silver 925 Derivation,999 fine silver = ₹95000/kg,925 sterling = ₹87875/kg,925 sterling = ₹87875/kg,Automated Unit,PASS
+Metal Rates,TC-RAT-003,Non-positive rate rejection,Rate = -100,Error: Metal rates must be positive,Rejected with error,Automated Unit,PASS
+Metal Rates,TC-RAT-004,Rate Audit Trail Employee Attribution,Sunil Mehta updates rate,History records timestamp Sunil Mehta role,Recorded accurately,Automated Unit,PASS
+Metal Rates,TC-RAT-005,Rate History Multi-Tenant Isolation,Tenant A rates vs Tenant B rates,Tenant A rate history independent from B,FAILED: Both read global storage key,Integration,FAIL
+Inventory,TC-INV-001,Net Weight Deduction Arithmetic,Gross 10.234g Stone 0.400g Other 0.200g,Net weight = 9.634g,Net weight = 9.634g,Automated Unit,PASS
+Inventory,INV-002,Fine Weight Tunch Equivalent,Net 10.000g 22K (22/24),Fine weight = 9.167g,Fine weight = 9.167g,Automated Unit,PASS
+Inventory,TC-INV-003,Standardized Sarafa SKU Generation,Category Chains 18K Seq 84,SKU = CHN-18K-084,SKU = CHN-18K-084,Automated Unit,PASS
+Inventory,TC-INV-004,Code 128 Vector SVG Rendering,Barcode '8901840001',Valid XML SVG path with black/white bars,Valid SVG rendered,Automated Unit,PASS
+Inventory,TC-INV-005,Immutable Stock Movement Logging,Move from Showcase to Vault Safe #A,StockMovement record created with clerk ID,Record created with clerk ID,Automated Unit,PASS
+Inventory,TC-INV-006,Duplicate Barcode Creation Prevention,Input existing active barcode '8901840001',Prevent creation and alert user,Rejected duplicate,Automated Unit,PASS
+Billing POS,TC-POS-001,Split Payment Multi-Mode Settlement,Bill ₹175000: Cash ₹50k UPI ₹50k Card ₹25k Credit ₹50k,Total paid ₹125k balance due ₹50k status partial,Reconciled accurately,Automated Unit,PASS
+Billing POS,TC-POS-002,Partial Payment Balance Due Flagging,Bill ₹175000 paid ₹125000,Balance due ₹50000 status 'partial',Balance due ₹50000 status 'partial',Automated Unit,PASS
+Billing POS,TC-POS-003,Atomic Stock Item Sold Locking,Invoice finalize for stock-1,stock-1 status='sold' location='Sold/Delivered',Locked to sold and delivered,Automated Unit,PASS
+Billing POS,TC-POS-004,Stock Locking Name-Fallback Collision,Two unsold rings with same title 'Gold Ring',Only the selected ring item should be sold,FAILED: Both rings marked sold due to name matching,Integration,FAIL
+Billing POS,TC-POS-005,Old-Gold Scrap Lot Dual Entry,Customer exchange 10g 18K scrap,New unrefined item created in Vault Safe #Melting Box,Scrap lot created,Automated Unit,PASS
+Billing POS,TC-POS-006,Double-Selling Prevention,Try re-invoicing already sold item stock-1,Blocked: Item status is sold,Blocked correctly,Automated Unit,PASS
+Billing POS,TC-POS-007,Checkout Accounts Ledger Synchronization,Finalize ₹150000 Cash/UPI sale,Account 1010/1020 balance increments by ₹150000,FAILED: Account balances unchanged,Integration,FAIL
+Purchases,TC-PUR-001,Atomic Purchase Stock Inwarding,Inward 2 necklaces from Zaveri Bullion,Stock items added to inventory with barcodes,Stock added with barcodes,Automated Unit,PASS
+Purchases,TC-PUR-002,Supplier Payment Balance Reduction,Pay ₹50000 to Zaveri Bullion,Supplier outstanding reduced by ₹50000,Outstanding reduced by ₹50000,Automated Unit,PASS
+Purchases,TC-PUR-003,Customer High-Value Sec 139A Compliance,Bill ₹250000 without PAN card,Warning flag: PAN mandatory under Sec 139A,Flagged correctly,Automated Unit,PASS
+Purchases,TC-PUR-004,RBAC Cost Masking from Salesperson,Salesperson role accesses purchase page,RestrictedModuleGuard displays Access Restricted,Guard active,Automated Unit,PASS
+Purchases,TC-PUR-005,Purchase Accounts Ledger Synchronization,Record ₹200000 wholesale purchase,Accounts 2010 Supplier Payables credited,FAILED: Accounts ledger unchanged,Integration,FAIL
+Karigar,TC-KAR-001,Pure Bullion Issuance to Artisan,Issue 100g 24K bar to Babulal Soni,Karigar gold balance increases by 100g,Balance increased by 100g,Automated Unit,PASS
+Karigar,TC-KAR-002,Artisan Bullion Central Stock Deduction,Issue 100g 24K bullion to artisan,Central inventory bullion stock decreases by 100g,FAILED: Central inventory bullion unchanged,Integration,FAIL
+Karigar,TC-KAR-003,Ornament Receipt with Ghat Loss Deduction,Receive 90g finished 22K (82.5g fine) 2g Ghat,Deducts 84.5g fine gold adds ₹15000 labour due,Deducted and labour added,Automated Unit,PASS
+Karigar,TC-KAR-004,Finished Ornament Inwarding into Inventory,Receive bridal necklace from karigar,New StockItem appears in Showcase inventory,FAILED: StockItem not created in inventory,Integration,FAIL
+Karigar,TC-KAR-005,Artisan Labour Cash Settlement,Pay ₹15000 labour to karigar,Karigar labour due reduced by ₹15000,Due reduced by ₹15000,Automated Unit,PASS
+Karigar,TC-KAR-006,Job Card Lifecycle Advancement,JC-2026-001 advances to hallmarking,Status='hallmarking' HUID assigned,Status updated,Automated Unit,PASS
+Karigar,TC-KAR-007,WhatsApp Karigar Statement Formatter,Generate hisab parcha for artisan,URL-encoded statement with gold/silver/cash balance,Generated accurately,Automated Unit,PASS
+Accounts,TC-ACC-001,Petty Shop Expense Recording,Record ₹450 chai expense from Cash,Expense logged Account 1010 decreased by ₹450,Expense logged and cash decreased,Automated Unit,PASS
+Accounts,TC-ACC-002,Daily Cash Closing Denomination Tally,170x₹500 45x₹200 40x₹100 = ₹98000,Physical cash ₹98000 discrepancy ₹0 status 'tallied',Tallied perfectly,Automated Unit,PASS
+Accounts,TC-ACC-003,Cash Drawer Shortage Detection,Expected ₹98700 counted ₹98000,Discrepancy -₹700 status 'shortage',Shortage detected,Automated Unit,PASS
+Accounts,TC-ACC-004,RBAC Cashbook Isolation from Salesperson,Salesperson accesses Accounts tab,Access Restricted: Financial & Profit Reports,Restricted cleanly,Automated Unit,PASS
+Wholesale,TC-WHO-001,Consignment Memo Issue (Jangad),Issue ₹775000 goods on memo to Radha Govind,Memo status active_issued stock status on_memo,Issued with on_memo status,Automated Unit,PASS
+Wholesale,TC-WHO-002,Partial Consignment Return,Return 1 of 2 memo items,Item restored to in_showcase memo updated,Restored to showcase,Automated Unit,PASS
+Wholesale,TC-WHO-003,Memo Conversion to Invoice,Convert remaining memo item to invoice,Stock marked sold memo marked invoiced,Stock marked sold,Automated Unit,PASS
+Wholesale,TC-WHO-004,Memo Conversion Invoices Registry Synchronization,Convert memo to invoice WH-INV-101,WH-INV-101 appears in InvoicesRegistry & Reports,FAILED: Not added to invoices array,Integration,FAIL
+Wholesale,TC-WHO-005,WhatsApp Consignment Dispatch Formatter,Generate Sarafa trade dispatch parcha,URL-encoded trade dispatch statement,Generated accurately,Automated Unit,PASS
+Girvi,TC-GIR-001,Form 7 Pawn Ticket Packet Intake,Pledge 25g gold loan ₹150000 @ 1.5% saikda,Loan created packet PKT-101 location Tijori #1,Loan and packet created,Automated Unit,PASS
+Girvi,TC-GIR-002,Pawn Brokering Interest Accrual Arithmetic,₹150000 @ 1.5%/month for 3 months,Simple: ₹6750 Compound: ₹6852.19,Calculated accurately,Automated Unit,PASS
+Girvi,TC-GIR-003,Monthly Interest Installment Payment,Customer pays ₹2250 interest,Interest paid increases loan balance unaffected,Interest logged,Automated Unit,PASS
+Girvi,TC-GIR-004,Principal Repayment & Automatic Release,Customer repays ₹150000 principal,Loan status transitions to 'released',Released automatically,Automated Unit,PASS
+Girvi,TC-GIR-005,WhatsApp Form 7 Ticket Dispatch,Generate pawn ticket WhatsApp text,URL-encoded Form 7 receipt text,Generated accurately,Automated Unit,PASS
+Repairs,TC-REP-001,Customer Repair Slip Intake,Intake broken bangle gross 18.5g net 18.0g,Repair job created status='received',Created with scale weights,Automated Unit,PASS
+Repairs,TC-REP-002,Repair Service Lifecycle Advancement,Repair advances to ready_for_delivery,Status='ready_for_delivery' charges logged,Status updated,Automated Unit,PASS
+Repairs,TC-REP-003,Custom Bridal Booking Order with Rate Lock,Booking ₹500000 advance ₹100000 locked rate,Booking created rate lock flag active,Booking created,Automated Unit,PASS
+Repairs,TC-REP-004,WhatsApp Repair Completion Notification,Generate repair ready alert,Formatted WhatsApp text with charges,Generated accurately,Automated Unit,PASS
+Reports,TC-REP-001,GSTR-1 Tax Computation (HSN 7113),Invoices total ₹100000 @ 3% GST,CGST ₹1500 SGST ₹1500 total ₹3000,Symmetric 1.5% split accurate,Automated Unit,PASS
+Reports,TC-REP-002,Section 139A High Value Audit Report,Invoices >= ₹200000,Identifies invoices without PAN card,Flagged accurately,Automated Unit,PASS
+Reports,TC-REP-003,Multi-Payment Revenue Allocation Meters,Invoices with split Cash/UPI/Card,Meters show exact channel distribution,Distributed accurately,Automated Unit,PASS
+Reports,TC-REP-004,Sarafa P&L Net Operating Profit,Making revenue ₹168400 expenses ₹46100,Net operating profit = ₹122300,Profit ₹122300,Automated Unit,PASS
+Settings,TC-SET-001,BIS Hallmarking Showroom Master Defaults,Default tenant initialization,License HM-RJ-2026-8842 GSTIN 08AAAAJ1234F1Z8,Verified accurately,Automated Unit,PASS
+Settings,TC-SET-002,Settings Customization Persistence,Update business name and making charge,Persists and updates ShowroomMasterSettings,Persisted accurately,Automated Unit,PASS
+Settings,TC-SET-003,1-Click Complete Tenant JSON Backup,Generate snapshot across all 14 modules,Snapshot v2.0.0 contains all 14 data arrays,Generated with all collections,Automated Unit,PASS
+Settings,TC-SET-004,1-Click Database Restore from JSON,Restore snapshot into target tenant,Restores stock customers karigars and tallies,Restored accurately,Automated Unit,PASS
+Settings,TC-SET-005,Corrupted Backup JSON Error Handling,Input malformed/empty JSON snapshot,Graceful failure: success=false with message,Handled gracefully,Automated Unit,PASS
