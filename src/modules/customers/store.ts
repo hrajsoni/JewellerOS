@@ -89,21 +89,42 @@ export const INITIAL_CUSTOMERS: Customer[] = [
   },
 ];
 
+const inMemoryCache: Record<string, string> = {};
+
+function getItem(key: string): string | null {
+  if (typeof window !== "undefined") {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+  return inMemoryCache[key] ?? null;
+}
+
+function setItem(key: string, value: string): void {
+  inMemoryCache[key] = value;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
+  }
+}
+
 export function getTenantCustomerStorageKey(tenantId?: string): string {
   return tenantId ? `jewellery_os_tenant_${tenantId}_customers` : CUSTOMERS_STORAGE_KEY;
 }
 
 export function getSavedCustomers(tenantId?: string): Customer[] {
-  if (typeof window === "undefined") return INITIAL_CUSTOMERS;
   try {
     const key = getTenantCustomerStorageKey(tenantId);
-    let raw = localStorage.getItem(key);
+    let raw = getItem(key);
     if (!raw && tenantId === "tenant-sandhya-jaipur") {
-      raw = localStorage.getItem(getTenantCustomerStorageKey("tenant-soni-jaipur"));
+      raw = getItem(getTenantCustomerStorageKey("tenant-soni-jaipur"));
     }
     if (!raw) {
       const initial = (!tenantId || tenantId === "tenant-sandhya-jaipur" || tenantId === "tenant-soni-jaipur") ? INITIAL_CUSTOMERS : [];
-      localStorage.setItem(key, JSON.stringify(initial));
+      setItem(key, JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(raw);
@@ -113,10 +134,9 @@ export function getSavedCustomers(tenantId?: string): Customer[] {
 }
 
 export function saveCustomers(customers: Customer[], tenantId?: string): void {
-  if (typeof window === "undefined") return;
   try {
     const key = getTenantCustomerStorageKey(tenantId);
-    localStorage.setItem(key, JSON.stringify(customers));
+    setItem(key, JSON.stringify(customers));
   } catch (err) {
     console.error("Failed to save customers to storage:", err);
   }

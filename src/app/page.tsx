@@ -177,6 +177,10 @@ import {
   updateBookingStatus,
 } from "../modules/repairs/store";
 
+import { SettingsManager } from "../components/settings/SettingsManager";
+import { getSavedSettings } from "../modules/settings/store";
+import { ShowroomMasterSettings } from "../modules/settings/types";
+
 const RestrictedModuleGuard: React.FC<{
   moduleName: string;
   allowedRoles: string;
@@ -290,6 +294,11 @@ function WorkspaceMain() {
   // Preselected Customer for Billing
   const [selectedBillingCustomer, setSelectedBillingCustomer] = useState<CustomerProfile | null>(null);
 
+  // Showroom Master Settings & System Config State
+  const [showroomSettings, setShowroomSettings] = useState<ShowroomMasterSettings>(() =>
+    getSavedSettings(activeTenant.id)
+  );
+
   // Synchronize Active Tenant Data and Isolated Database
   const loadTenantData = (tenant: JewellerTenant) => {
     setActiveTenant(tenant);
@@ -318,6 +327,7 @@ function WorkspaceMain() {
     setB2BPartners(getSavedB2BPartners(tenant.id));
     setRepairs(getSavedRepairs(tenant.id));
     setBookings(getSavedBookings(tenant.id));
+    setShowroomSettings(getSavedSettings(tenant.id));
     setDraftItems([]);
   };
 
@@ -342,25 +352,6 @@ function WorkspaceMain() {
     const tenants = getAllTenants();
     setAllTenants(tenants);
     loadTenantData(created);
-  };
-
-  const [settingsSaved, setSettingsSaved] = useState<boolean>(false);
-
-  const handleSaveShowroomSettings = () => {
-    const updated = updateTenantProfile(activeTenant.id, {
-      businessName: shopName,
-      gstin,
-      phone,
-      address,
-      defaultGoldRate: goldRate,
-      defaultSilverRate: silverRate,
-    });
-    if (updated) {
-      setActiveTenant(updated);
-      setAllTenants(getAllTenants());
-      setSettingsSaved(true);
-      setTimeout(() => setSettingsSaved(false), 3000);
-    }
   };
 
   // Sync theme attribute to <html> tag
@@ -1234,86 +1225,36 @@ function WorkspaceMain() {
 
           {/* View: Shop Settings */}
           {activeTab === "/settings" && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3 pb-2 border-b border-white/[0.05]">
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
-                    Showroom Profile & Metal Rules
-                  </h1>
-                  <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
-                    Tenant ID: <span className="font-mono text-[#DFC488]">{activeTenant.id}</span> · Isolated database partition for {activeTenant.businessName}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {settingsSaved && (
-                    <span className="text-xs text-[var(--accent-emerald)] font-medium">
-                      ✓ Showroom Profile Saved
-                    </span>
-                  )}
-                  <GlassButton
-                    variant="primary"
-                    size="sm"
-                    onClick={handleSaveShowroomSettings}
-                  >
-                    Save Showroom Profile
-                  </GlassButton>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-6 rounded-xl bg-[var(--surface-primary)] border border-white/[0.06] space-y-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] block">
-                    Shop Identity & Bill Header
-                  </span>
-                  <GlassInput
-                    label="Shop / Business Name"
-                    value={shopName}
-                    onChange={(e) => setShopName(e.target.value)}
-                  />
-                  <GlassInput
-                    label="Shop GSTIN / Tax ID"
-                    value={gstin}
-                    onChange={(e) => setGstin(e.target.value)}
-                  />
-                  <GlassInput
-                    label="Contact Phone"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                  <GlassInput
-                    label="Registered Address"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                  />
-                </div>
-
-                <div className="p-6 rounded-xl bg-[var(--surface-primary)] border border-white/[0.06] space-y-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] block">
-                    Default Metal Board Rates
-                  </span>
-                  <GlassInput
-                    label="24K Gold Rate (per 10g)"
-                    type="number"
-                    prefixSymbol="₹"
-                    value={goldRate}
-                    onChange={(e) => setGoldRate(parseFloat(e.target.value) || 0)}
-                  />
-                  <GlassInput
-                    label="Fine Silver Rate (per kg)"
-                    type="number"
-                    prefixSymbol="₹"
-                    value={silverRate}
-                    onChange={(e) => setSilverRate(parseFloat(e.target.value) || 0)}
-                  />
-                  <div className="p-3 rounded-lg bg-black/30 border border-white/[0.04] text-xs text-[var(--text-secondary)]">
-                    <span className="text-[var(--accent-emerald)] font-medium">
-                      ✓ Formula Engine:
-                    </span>{" "}
-                    Exact fractional Karat ratio (K/24). 22ct rate derives to ₹1,37,500 / 10g with 0 paise rounding drift.
-                  </div>
-                </div>
-              </div>
-            </div>
+            hasPermission("MANAGE_EMPLOYEES") ? (
+              <SettingsManager
+                initialSettings={showroomSettings}
+                tenantId={activeTenant.id}
+                onSettingsUpdated={(updated) => {
+                  setShowroomSettings(updated);
+                  setShopName(updated.businessName);
+                  setAddress(updated.address);
+                  setPhone(updated.phone);
+                  setGstin(updated.gstin);
+                  setGoldRate(updated.defaultGoldRate24k);
+                  setSilverRate(updated.defaultSilverRateKg);
+                  updateTenantProfile(activeTenant.id, {
+                    businessName: updated.businessName,
+                    address: updated.address,
+                    phone: updated.phone,
+                    gstin: updated.gstin,
+                    defaultGoldRate: updated.defaultGoldRate24k,
+                    defaultSilverRate: updated.defaultSilverRateKg,
+                  });
+                  setAllTenants(getAllTenants());
+                }}
+                onRestoreCompleted={() => loadTenantData(activeTenant)}
+              />
+            ) : (
+              <RestrictedModuleGuard
+                moduleName="Showroom Configuration & Data Vault"
+                allowedRoles="Owner, Admin"
+              />
+            )
           )}
         </main>
 

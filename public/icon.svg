@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#1A1813"/>
+      <stop offset="100%" stop-color="#08090C"/>
+    </radialGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DFC488"/>
+      <stop offset="45%" stop-color="#C5A059"/>
+      <stop offset="70%" stop-color="#F2DEC0"/>
+      <stop offset="100%" stop-color="#8C6D32"/>
+    </linearGradient>
+    <linearGradient id="goldAccent" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#DFC488" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#C5A059" stop-opacity="0.3"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Obsidian Shield Canvas -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGlow)"/>
+  <rect x="8" y="8" width="496" height="496" rx="104" fill="none" stroke="url(#goldGrad)" stroke-width="2" stroke-opacity="0.3"/>
+
+  <!-- Faceted Diamond & Crown Motif -->
+  <g transform="translate(256, 256)">
+    <!-- Outer Glow -->
+    <circle r="140" fill="none" stroke="url(#goldGrad)" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.4"/>
+    
+    <!-- Top Table of Diamond -->
+    <polygon points="-80,-60 80,-60 120,-10 0,110 -120,-10" fill="none" stroke="url(#goldGrad)" stroke-width="10" stroke-linejoin="round"/>
+    
+    <!-- Facet Inner Lines -->
+    <polygon points="-45,-60 45,-60 0,-10" fill="url(#goldAccent)" stroke="url(#goldGrad)" stroke-width="6" stroke-linejoin="round"/>
+    <polygon points="-45,-60 -120,-10 0,-10" fill="none" stroke="url(#goldGrad)" stroke-width="6" stroke-linejoin="round"/>
+    <polygon points="45,-60 120,-10 0,-10" fill="none" stroke="url(#goldGrad)" stroke-width="6" stroke-linejoin="round"/>
+    <polygon points="-120,-10 0,110 0,-10" fill="url(#goldAccent)" stroke="url(#goldGrad)" stroke-width="6" stroke-linejoin="round"/>
+    <polygon points="120,-10 0,110 0,-10" fill="none" stroke="url(#goldGrad)" stroke-width="6" stroke-linejoin="round"/>
+    
+    <!-- Core Sparkle -->
+    <circle cx="0" cy="-10" r="8" fill="#FFF3D6"/>
+  </g>
+</svg>

@@ -1,0 +1,42 @@
+{
+  "name": "JewelleryOS · The Operating System for Jewellery Businesses",
+  "short_name": "JewelleryOS",
+  "description": "Production-grade multi-tenant ERP for Indian jewellery businesses, retail counters, bullion vaults, and karigar workshops.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08090C",
+  "theme_color": "#08090C",
+  "orientation": "any",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Counter Calculator",
+      "short_name": "Calculator",
+      "description": "Fast jewellery counter pricing formula calculator",
+      "url": "/?tab=calculator",
+      "icons": [{ "src": "/icon.svg", "sizes": "512x512" }]
+    },
+    {
+      "name": "Billing POS",
+      "short_name": "Billing",
+      "description": "Open sales tax billing counter terminal",
+      "url": "/?tab=billing",
+      "icons": [{ "src": "/icon.svg", "sizes": "512x512" }]
+    },
+    {
+      "name": "Showroom Inventory",
+      "short_name": "Stock",
+      "description": "Look up serialized inventory items and barcodes",
+      "url": "/?tab=inventory",
+      "icons": [{ "src": "/icon.svg", "sizes": "512x512" }]
+    }
+  ]
+}

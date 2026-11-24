@@ -217,3 +217,14 @@ export function saveNewInvoice(invoice: FinalizedInvoice, tenantId?: string): vo
     console.error("Failed to save invoice to storage:", err);
   }
 }
+
+export function saveInvoicesDirect(invoices: FinalizedInvoice[], tenantId?: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const key = getTenantInvoiceStorageKey(tenantId);
+    localStorage.setItem(key, JSON.stringify(invoices));
+  } catch (err) {
+    console.error("Failed to save invoices directly to storage:", err);
+  }
+}
+

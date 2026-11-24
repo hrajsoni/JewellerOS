@@ -217,6 +217,28 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
   },
 ];
 
+const inMemoryCache: Record<string, string> = {};
+
+function getItem(key: string): string | null {
+  if (typeof window !== "undefined") {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+  return inMemoryCache[key] ?? null;
+}
+
+function setItem(key: string, value: string): void {
+  inMemoryCache[key] = value;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
+  }
+}
+
 export function getTenantInventoryStorageKey(tenantId?: string): string {
   return tenantId ? `jewellery_os_tenant_${tenantId}_inventory_v3` : INVENTORY_STORAGE_KEY;
 }
@@ -226,15 +248,12 @@ export function getTenantMovementsStorageKey(tenantId?: string): string {
 }
 
 export function getSavedStock(tenantId?: string): StockItem[] {
-  if (typeof window === "undefined") return INITIAL_STOCK_ITEMS;
   try {
     const key = getTenantInventoryStorageKey(tenantId);
-    const raw = localStorage.getItem(key);
+    const raw = getItem(key);
     if (!raw) {
-      const initial = (!tenantId || tenantId === "tenant-sandhya-jaipur" || tenantId === "tenant-soni-jaipur")
-        ? INITIAL_STOCK_ITEMS
-        : [];
-      localStorage.setItem(key, JSON.stringify(initial));
+      const initial = INITIAL_STOCK_ITEMS.map((item) => ({ ...item }));
+      setItem(key, JSON.stringify(initial));
       return initial;
     }
     const parsed = JSON.parse(raw);
@@ -245,22 +264,20 @@ export function getSavedStock(tenantId?: string): StockItem[] {
 }
 
 export function saveStockItems(items: StockItem[], tenantId?: string): void {
-  if (typeof window === "undefined") return;
   try {
     const key = getTenantInventoryStorageKey(tenantId);
-    localStorage.setItem(key, JSON.stringify(items));
+    setItem(key, JSON.stringify(items));
   } catch (err) {
     console.error("Failed to save inventory to storage:", err);
   }
 }
 
 export function getStockMovements(tenantId?: string): StockMovementRecord[] {
-  if (typeof window === "undefined") return INITIAL_STOCK_MOVEMENTS;
   try {
     const key = getTenantMovementsStorageKey(tenantId);
-    const raw = localStorage.getItem(key);
+    const raw = getItem(key);
     if (!raw) {
-      localStorage.setItem(key, JSON.stringify(INITIAL_STOCK_MOVEMENTS));
+      setItem(key, JSON.stringify(INITIAL_STOCK_MOVEMENTS));
       return INITIAL_STOCK_MOVEMENTS;
     }
     const parsed = JSON.parse(raw);
@@ -280,14 +297,12 @@ export function recordStockMovement(
     timestamp: new Date().toISOString(),
   };
 
-  if (typeof window !== "undefined") {
-    try {
-      const history = getStockMovements(tenantId);
-      const updated = [newRecord, ...history];
-      localStorage.setItem(getTenantMovementsStorageKey(tenantId), JSON.stringify(updated));
-    } catch (err) {
-      console.error("Failed to persist stock movement:", err);
-    }
+  try {
+    const history = getStockMovements(tenantId);
+    const updated = [newRecord, ...history];
+    setItem(getTenantMovementsStorageKey(tenantId), JSON.stringify(updated));
+  } catch (err) {
+    console.error("Failed to persist stock movement:", err);
   }
 
   return newRecord;
