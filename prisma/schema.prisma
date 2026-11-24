@@ -1,7 +1,6 @@
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -9,11 +8,11 @@ generator client {
 }
 
 // ==========================================
-// 1. BUSINESS, BRANCHES & RBAC
+// 1. BUSINESS, BRANCHES, RBAC & SETTINGS
 // ==========================================
 
 model Business {
-  id              String         @id @default(uuid()) @db.Uuid
+  id              String         @id @default(cuid())
   name            String         @db.VarChar(150)
   legalEntityName String?        @db.VarChar(150)
   gstin           String?        @db.VarChar(15)
@@ -30,25 +29,37 @@ model Business {
   createdAt       DateTime       @default(now()) @db.Timestamptz
   updatedAt       DateTime       @updatedAt @db.Timestamptz
 
-  branches        Branch[]
-  users           User[]
-  products        Product[]
-  stockItems      StockItem[]
-  invoices        Invoice[]
-  customers       Customer[]
-  suppliers       Supplier[]
-  karigars        Karigar[]
-  metalRates      MetalRate[]
-  girviLoans      GirviLoan[]
-  accounts        Account[]
-  journalEntries  JournalEntry[]
+  branches               Branch[]
+  users                  User[]
+  products               Product[]
+  stockItems             StockItem[]
+  invoices               Invoice[]
+  customers              Customer[]
+  suppliers              Supplier[]
+  karigars               Karigar[]
+  metalRates             MetalRate[]
+  girviLoans             GirviLoan[]
+  accounts               Account[]
+  journalEntries         JournalEntry[]
+  consignmentMemos       ConsignmentMemo[]
+  b2bPartners            B2BPartner[]
+  repairJobs             RepairJob[]
+  customBookingOrders    CustomBookingOrder[]
+  jobCards               JobCard[]
+  purchaseInvoices       PurchaseInvoice[]
+  supplierPayments       SupplierPayment[]
+  dailyCashClosings      DailyCashClosing[]
+  shopExpenses           ShopExpense[]
+  staffMembers           StaffMember[]
+  staffPayments          StaffPayment[]
+  showroomMasterSettings ShowroomMasterSettings?
 
   @@map("businesses")
 }
 
 model Branch {
-  id          String      @id @default(uuid()) @db.Uuid
-  businessId  String      @db.Uuid
+  id          String      @id @default(cuid())
+  businessId  String
   name        String      @db.VarChar(100)
   code        String      @db.VarChar(10)
   phone       String?     @db.VarChar(20)
@@ -76,9 +87,9 @@ enum RoleType {
 }
 
 model User {
-  id             String      @id @default(uuid()) @db.Uuid
-  businessId     String      @db.Uuid
-  branchId       String?     @db.Uuid
+  id             String      @id @default(cuid())
+  businessId     String
+  branchId       String?
   fullName       String      @db.VarChar(100)
   email          String      @unique @db.VarChar(100)
   phone          String      @db.VarChar(20)
@@ -98,6 +109,34 @@ model User {
   @@map("users")
 }
 
+model ShowroomMasterSettings {
+  id                 String   @id @default(cuid())
+  businessId         String   @unique
+  showroomName       String   @db.VarChar(150)
+  tagline            String?  @db.VarChar(150)
+  addressLine1       String   @db.VarChar(200)
+  addressLine2       String?  @db.VarChar(200)
+  city               String   @db.VarChar(50)
+  state              String   @db.VarChar(50)
+  pincode            String   @db.VarChar(10)
+  stateCode          String   @default("08") @db.VarChar(5)
+  contactPhones      String[] 
+  email              String?  @db.VarChar(100)
+  gstin              String   @db.VarChar(15)
+  bisHallmarkLicense String?  @db.VarChar(50)
+  panNumber          String?  @db.VarChar(10)
+  cinNumber          String?  @db.VarChar(30)
+  invoiceFormat      String   @default("A4_DETAILED") @db.VarChar(30)
+  defaultTaxRate     Decimal  @default(3.0) @db.Decimal(4, 2)
+  thermalPrinterWidth Int     @default(50)
+  barcodeTagFormat   String   @default("TAG_50x25_BUTTERFLY") @db.VarChar(40)
+  updatedAt          DateTime @updatedAt @db.Timestamptz
+
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@map("showroom_master_settings")
+}
+
 // ==========================================
 // 2. METAL RATES & VALUATION RULES
 // ==========================================
@@ -109,15 +148,17 @@ enum MetalType {
 }
 
 model MetalRate {
-  id            String      @id @default(uuid()) @db.Uuid
-  businessId    String      @db.Uuid
+  id            String      @id @default(cuid())
+  businessId    String
   metal         MetalType
   purityKey     String      @db.VarChar(10) // 24K, 22K, 18K, 14K, 925
   purityPercent Decimal     @db.Decimal(6, 4) // e.g. 0.9167 for 22K
   sellingRate   Decimal     @db.Decimal(12, 2) // Per 10g for Gold, per 1kg for Silver
   purchaseRate  Decimal     @db.Decimal(12, 2) // Old gold exchange basis
   effectiveAt   DateTime    @default(now()) @db.Timestamptz
-  updatedById   String?     @db.Uuid
+  updatedById   String?
+  source        String?     @default("MANUAL") @db.VarChar(50)
+  notes         String?     @db.Text
 
   business      Business    @relation(fields: [businessId], references: [id], onDelete: Restrict)
 
@@ -126,7 +167,7 @@ model MetalRate {
 }
 
 // ==========================================
-// 3. PRODUCT DESIGNS & INDIVIDUAL STOCK ITEMS
+// 3. PRODUCT DESIGNS, STOCK & SERIALIZED ITEMS
 // ==========================================
 
 enum StockStatus {
@@ -136,6 +177,7 @@ enum StockStatus {
   SOLD
   WITH_KARIGAR
   IN_REPAIR
+  ON_MEMO
   DAMAGED
   RETURNED_TO_SUPPLIER
 }
@@ -147,8 +189,8 @@ enum MakingType {
 }
 
 model Product {
-  id             String      @id @default(uuid()) @db.Uuid
-  businessId     String      @db.Uuid
+  id             String      @id @default(cuid())
+  businessId     String
   name           String      @db.VarChar(150)
   category       String      @db.VarChar(50) // Rings, Bangles, Chains, Utensils
   metal          MetalType
@@ -168,10 +210,10 @@ model Product {
 }
 
 model StockItem {
-  id              String          @id @default(uuid()) @db.Uuid
-  businessId      String          @db.Uuid
-  branchId        String?         @db.Uuid
-  productId       String          @db.Uuid
+  id              String          @id @default(cuid())
+  businessId      String
+  branchId        String?
+  productId       String
   barcode         String          @unique @db.VarChar(50)
   sku             String          @db.VarChar(50)
   title           String          @db.VarChar(150)
@@ -187,7 +229,8 @@ model StockItem {
   acquisitionCost Decimal         @db.Decimal(12, 2)
   trayLocation    String?         @db.VarChar(50)
   status          StockStatus     @default(IN_SHOWCASE)
-  supplierId      String?         @db.Uuid
+  supplierId      String?
+  huid            String?         @db.VarChar(20)
   dateAcquired    DateTime        @default(now()) @db.Timestamptz
 
   business        Business        @relation(fields: [businessId], references: [id], onDelete: Restrict)
@@ -203,15 +246,17 @@ model StockItem {
 }
 
 model StockMovement {
-  id            String      @id @default(uuid()) @db.Uuid
-  stockItemId   String      @db.Uuid
+  id            String      @id @default(cuid())
+  stockItemId   String
   fromStatus    StockStatus
   toStatus      StockStatus
-  reason        String      @db.VarChar(100) // "Sale Invoice #INV-102", "Transfer to Vault"
-  referenceType String?     @db.VarChar(50) // "INVOICE", "PURCHASE", "WORK_ORDER"
+  reason        String      @db.VarChar(150)
+  referenceType String?     @db.VarChar(50)
   referenceId   String?     @db.VarChar(100)
+  fromLocation  String?     @db.VarChar(100)
+  toLocation    String?     @db.VarChar(100)
   timestamp     DateTime    @default(now()) @db.Timestamptz
-  performedById String?     @db.Uuid
+  performedById String?
 
   stockItem     StockItem   @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
 
@@ -239,14 +284,14 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id               String        @id @default(uuid()) @db.Uuid
-  businessId       String        @db.Uuid
-  branchId         String?       @db.Uuid
+  id               String        @id @default(cuid())
+  businessId       String
+  branchId         String?
   invoiceNumber    String        @db.VarChar(50)
   type             InvoiceType   @default(RETAIL_GST)
   status           InvoiceStatus @default(FINALIZED)
   invoiceDate      DateTime      @default(now()) @db.Timestamptz
-  customerId       String?       @db.Uuid
+  customerId       String?
   customerName     String        @db.VarChar(100)
   customerPhone    String        @db.VarChar(20)
   customerGstin    String?       @db.VarChar(15)
@@ -265,7 +310,7 @@ model Invoice {
   netPayable       Decimal       @db.Decimal(12, 2)
   totalPaid        Decimal       @db.Decimal(12, 2)
   balanceDue       Decimal       @default(0) @db.Decimal(12, 2)
-  createdById      String?       @db.Uuid
+  createdById      String?
   createdAt        DateTime      @default(now()) @db.Timestamptz
 
   business         Business      @relation(fields: [businessId], references: [id], onDelete: Restrict)
@@ -280,9 +325,9 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id            String     @id @default(uuid()) @db.Uuid
-  invoiceId     String     @db.Uuid
-  stockItemId   String?    @db.Uuid
+  id            String     @id @default(cuid())
+  invoiceId     String
+  stockItemId   String?
   description   String     @db.VarChar(150)
   metal         MetalType
   purityKey     String     @db.VarChar(10)
@@ -311,11 +356,11 @@ enum PaymentMethod {
 }
 
 model Payment {
-  id          String        @id @default(uuid()) @db.Uuid
-  invoiceId   String        @db.Uuid
+  id          String        @id @default(cuid())
+  invoiceId   String
   method      PaymentMethod
   amount      Decimal       @db.Decimal(12, 2)
-  referenceNo String?       @db.VarChar(100) // UPI UTR, Card Txn ID
+  referenceNo String?       @db.VarChar(100)
   paymentDate DateTime      @default(now()) @db.Timestamptz
 
   invoice     Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -328,8 +373,8 @@ model Payment {
 // ==========================================
 
 model Customer {
-  id             String      @id @default(uuid()) @db.Uuid
-  businessId     String      @db.Uuid
+  id             String      @id @default(cuid())
+  businessId     String
   name           String      @db.VarChar(100)
   phone          String      @db.VarChar(20)
   email          String?     @db.VarChar(100)
@@ -345,47 +390,195 @@ model Customer {
   business       Business    @relation(fields: [businessId], references: [id], onDelete: Restrict)
   invoices       Invoice[]
   girviLoans     GirviLoan[]
+  repairs        RepairJob[]
+  bookings       CustomBookingOrder[]
 
   @@unique([businessId, phone])
   @@map("customers")
 }
 
 model Supplier {
-  id             String      @id @default(uuid()) @db.Uuid
-  businessId     String      @db.Uuid
-  name           String      @db.VarChar(100)
-  contactPerson  String?     @db.VarChar(100)
-  phone          String      @db.VarChar(20)
-  city           String      @db.VarChar(50)
-  gstin          String?     @db.VarChar(15)
-  metalSupplied  MetalType   @default(GOLD)
-  outstandingDue Decimal     @default(0) @db.Decimal(12, 2)
-  createdAt      DateTime    @default(now()) @db.Timestamptz
+  id                String            @id @default(cuid())
+  businessId        String
+  name              String            @db.VarChar(100)
+  contactPerson     String?           @db.VarChar(100)
+  phone             String            @db.VarChar(20)
+  city              String            @db.VarChar(50)
+  gstin             String?           @db.VarChar(15)
+  metalSupplied     MetalType         @default(GOLD)
+  outstandingDue    Decimal           @default(0) @db.Decimal(12, 2)
+  fineGoldBalance   Decimal           @default(0) @db.Decimal(10, 3)
+  fineSilverBalance Decimal           @default(0) @db.Decimal(10, 3)
+  createdAt         DateTime          @default(now()) @db.Timestamptz
 
-  business       Business    @relation(fields: [businessId], references: [id], onDelete: Restrict)
-  stockItems     StockItem[]
+  business          Business          @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  stockItems        StockItem[]
+  purchases         PurchaseInvoice[]
+  payments          SupplierPayment[]
 
   @@map("suppliers")
 }
 
 // ==========================================
-// 6. KARIGAR & ARTISAN MANUFACTURING
+// 6. PURCHASES & WHOLESALE INWARDING
+// ==========================================
+
+model PurchaseInvoice {
+  id            String         @id @default(cuid())
+  businessId    String
+  supplierId    String
+  invoiceNumber String         @db.VarChar(50)
+  invoiceDate   DateTime       @default(now()) @db.Timestamptz
+  supplierName  String         @db.VarChar(100)
+  itemsSubtotal Decimal        @db.Decimal(12, 2)
+  totalMaking   Decimal        @default(0) @db.Decimal(12, 2)
+  totalGst      Decimal        @default(0) @db.Decimal(12, 2)
+  grandTotal    Decimal        @db.Decimal(12, 2)
+  amountPaid    Decimal        @default(0) @db.Decimal(12, 2)
+  balanceDue    Decimal        @default(0) @db.Decimal(12, 2)
+  paymentMethod String         @default("Cash") @db.VarChar(30)
+  status        String         @default("paid") @db.VarChar(20)
+  createdAt     DateTime       @default(now()) @db.Timestamptz
+
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items         PurchaseItem[]
+
+  @@unique([businessId, invoiceNumber])
+  @@map("purchase_invoices")
+}
+
+model PurchaseItem {
+  id                String          @id @default(cuid())
+  purchaseInvoiceId String
+  description       String          @db.VarChar(150)
+  category          String          @db.VarChar(50)
+  metal             MetalType
+  purity            String          @db.VarChar(10)
+  grossWeight       Decimal         @db.Decimal(10, 3)
+  stoneWeight       Decimal         @default(0) @db.Decimal(10, 3)
+  netWeight         Decimal         @db.Decimal(10, 3)
+  fineWeight        Decimal         @db.Decimal(10, 3)
+  metalRate         Decimal         @db.Decimal(12, 2)
+  makingRate        Decimal         @default(0) @db.Decimal(8, 2)
+  subtotal          Decimal         @db.Decimal(12, 2)
+  trayLocation      String          @db.VarChar(50)
+
+  purchaseInvoice   PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_items")
+}
+
+model SupplierPayment {
+  id           String    @id @default(cuid())
+  businessId   String
+  supplierId   String
+  amount       Decimal   @db.Decimal(12, 2)
+  method       String    @db.VarChar(30)
+  referenceNo  String?   @db.VarChar(100)
+  date         DateTime  @default(now()) @db.Timestamptz
+  notes        String?   @db.Text
+
+  business     Business  @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  supplier     Supplier  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  @@map("supplier_payments")
+}
+
+// ==========================================
+// 7. WHOLESALE CONSIGNMENT MEMOS (जांगड़)
+// ==========================================
+
+model B2BPartner {
+  id             String            @id @default(cuid())
+  businessId     String
+  businessName   String            @db.VarChar(100)
+  contactPerson  String            @db.VarChar(100)
+  phone          String            @db.VarChar(20)
+  city           String            @db.VarChar(50)
+  address        String?           @db.Text
+  gstin          String?           @db.VarChar(15)
+  totalPurchased Decimal           @default(0) @db.Decimal(14, 2)
+  createdAt      DateTime          @default(now()) @db.Timestamptz
+
+  business       Business          @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  memos          ConsignmentMemo[]
+
+  @@map("b2b_partners")
+}
+
+model ConsignmentMemo {
+  id                     String                @id @default(cuid())
+  businessId             String
+  b2bPartnerId           String?
+  memoNumber             String                @db.VarChar(50)
+  partnerName            String                @db.VarChar(100)
+  partnerPhone           String                @db.VarChar(20)
+  partnerCity            String?               @db.VarChar(50)
+  partnerGstin           String?               @db.VarChar(15)
+  issueDate              DateTime              @default(now()) @db.Timestamptz
+  validUntilDate         DateTime              @db.Timestamptz
+  totalPieces            Int
+  totalGrossWeight       Decimal               @db.Decimal(10, 3)
+  totalNetWeight         Decimal               @db.Decimal(10, 3)
+  totalFineWeight        Decimal               @db.Decimal(10, 3)
+  totalEstimatedValue    Decimal               @db.Decimal(14, 2)
+  status                 String                @default("active_issued") @db.VarChar(30)
+  convertedInvoiceNumber String?               @db.VarChar(50)
+  notes                  String?               @db.Text
+  createdAt              DateTime              @default(now()) @db.Timestamptz
+  updatedAt              DateTime              @updatedAt @db.Timestamptz
+
+  business               Business              @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  b2bPartner             B2BPartner?           @relation(fields: [b2bPartnerId], references: [id], onDelete: SetNull)
+  items                  ConsignmentMemoItem[]
+
+  @@unique([businessId, memoNumber])
+  @@map("consignment_memos")
+}
+
+model ConsignmentMemoItem {
+  id             String          @id @default(cuid())
+  memoId         String
+  stockItemId    String?
+  sku            String?         @db.VarChar(50)
+  barcode        String?         @db.VarChar(50)
+  name           String          @db.VarChar(150)
+  category       String          @db.VarChar(50)
+  metal          MetalType
+  purity         String          @db.VarChar(10)
+  grossWeight    Decimal         @db.Decimal(10, 3)
+  netWeight      Decimal         @db.Decimal(10, 3)
+  fineWeight     Decimal         @db.Decimal(10, 3)
+  wholesaleRate  Decimal         @db.Decimal(12, 2)
+  totalValue     Decimal         @db.Decimal(12, 2)
+  status         String          @default("on_memo") @db.VarChar(30)
+
+  memo           ConsignmentMemo @relation(fields: [memoId], references: [id], onDelete: Cascade)
+
+  @@map("consignment_memo_items")
+}
+
+// ==========================================
+// 8. KARIGAR & ARTISAN MANUFACTURING
 // ==========================================
 
 model Karigar {
-  id                   String               @id @default(uuid()) @db.Uuid
-  businessId           String               @db.Uuid
+  id                   String               @id @default(cuid())
+  businessId           String
   name                 String               @db.VarChar(100)
   phone                String               @db.VarChar(20)
   workshopCity         String               @db.VarChar(50)
-  specialty            String               @db.VarChar(100) // Casting, Polki, Plain Gold
+  specialty            String               @db.VarChar(100)
   pureGoldBalanceGrams Decimal              @default(0) @db.Decimal(10, 3)
+  pureSilverBalance    Decimal              @default(0) @db.Decimal(10, 3)
   labourBalanceDue     Decimal              @default(0) @db.Decimal(12, 2)
   status               String               @default("active") @db.VarChar(20)
   createdAt            DateTime             @default(now()) @db.Timestamptz
 
   business             Business             @relation(fields: [businessId], references: [id], onDelete: Restrict)
   metalTransactions    KarigarTransaction[]
+  jobCards             JobCard[]
 
   @@map("karigars")
 }
@@ -397,8 +590,8 @@ enum KarigarTxnType {
 }
 
 model KarigarTransaction {
-  id              String         @id @default(uuid()) @db.Uuid
-  karigarId       String         @db.Uuid
+  id              String         @id @default(cuid())
+  karigarId       String
   type            KarigarTxnType
   date            DateTime       @default(now()) @db.Timestamptz
   metal           MetalType
@@ -416,8 +609,40 @@ model KarigarTransaction {
   @@map("karigar_transactions")
 }
 
+model JobCard {
+  id                    String    @id @default(cuid())
+  businessId            String
+  karigarId             String
+  jobCardNumber         String    @db.VarChar(50)
+  karigarName           String    @db.VarChar(100)
+  customerName          String?   @db.VarChar(100)
+  customerPhone         String?   @db.VarChar(20)
+  category              String    @db.VarChar(50)
+  title                 String    @db.VarChar(150)
+  description           String    @db.Text
+  metal                 MetalType
+  targetGrossWeight     Decimal   @db.Decimal(10, 3)
+  targetNetWeight       Decimal   @db.Decimal(10, 3)
+  purity                String    @db.VarChar(10)
+  issuedFineWeightGrams Decimal   @default(0) @db.Decimal(10, 3)
+  expectedDeliveryDate  DateTime  @db.Timestamptz
+  status                String    @default("created") @db.VarChar(30)
+  labourRate            Decimal   @db.Decimal(10, 2)
+  labourType            String    @default("per_gram") @db.VarChar(20)
+  allowedWastagePercent Decimal   @default(1.0) @db.Decimal(4, 2)
+  huid                  String?   @db.VarChar(20)
+  createdAt             DateTime  @default(now()) @db.Timestamptz
+  completedAt           DateTime? @db.Timestamptz
+
+  business              Business  @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  karigar               Karigar   @relation(fields: [karigarId], references: [id], onDelete: Restrict)
+
+  @@unique([businessId, jobCardNumber])
+  @@map("job_cards")
+}
+
 // ==========================================
-// 7. GIRVI & GOLD LOAN PAWN BOOK
+// 9. GIRVI & GOLD LOAN PAWN BOOK
 // ==========================================
 
 enum GirviStatus {
@@ -427,25 +652,26 @@ enum GirviStatus {
 }
 
 model GirviLoan {
-  id                  String            @id @default(uuid()) @db.Uuid
-  businessId          String            @db.Uuid
+  id                  String            @id @default(cuid())
+  businessId          String
   loanNumber          String            @db.VarChar(50)
   packetNumber        String            @db.VarChar(50)
-  safeLocation        String            @db.VarChar(50) // "Tijori #1, Dabba #A"
-  customerId          String?           @db.Uuid
+  safeLocation        String            @db.VarChar(50)
+  customerId          String?
   customerName        String            @db.VarChar(100)
   customerPhone       String            @db.VarChar(20)
   customerCity        String            @default("Jaipur") @db.VarChar(50)
   customerAddress     String?           @db.Text
 
   startDate           DateTime          @default(now()) @db.Timestamptz
+  dueDate             DateTime          @db.Timestamptz
   principalAmount     Decimal           @db.Decimal(12, 2)
-  monthlyInterestRate Decimal           @db.Decimal(5, 2) // e.g. 1.5% saikda
+  monthlyInterestRate Decimal           @db.Decimal(5, 2)
   durationMonths      Int               @default(6)
   status              GirviStatus       @default(ACTIVE)
   settledDate         DateTime?         @db.Timestamptz
   principalRepaid     Decimal           @default(0) @db.Decimal(12, 2)
-  interestPaid        Decimal           @default(0) @db.Decimal(12, 2)
+  totalInterestPaid   Decimal           @default(0) @db.Decimal(12, 2)
   notes               String?           @db.Text
 
   business            Business          @relation(fields: [businessId], references: [id], onDelete: Restrict)
@@ -459,8 +685,8 @@ model GirviLoan {
 }
 
 model PledgedOrnament {
-  id          String    @id @default(uuid()) @db.Uuid
-  girviLoanId String    @db.Uuid
+  id          String    @id @default(cuid())
+  girviLoanId String
   name        String    @db.VarChar(100)
   metal       MetalType @default(GOLD)
   purity      String    @db.VarChar(10)
@@ -473,7 +699,97 @@ model PledgedOrnament {
 }
 
 // ==========================================
-// 8. DOUBLE-ENTRY ACCOUNTS & CASHBOOK
+// 10. REPAIRS & CUSTOM BOOKINGS
+// ==========================================
+
+model RepairJob {
+  id                 String    @id @default(cuid())
+  businessId         String
+  customerId         String?
+  repairNumber       String    @db.VarChar(50)
+  customerName       String    @db.VarChar(100)
+  customerPhone      String    @db.VarChar(20)
+  ornamentName       String    @db.VarChar(150)
+  intakeGrossWeight  Decimal   @db.Decimal(10, 3)
+  problemDescription String    @db.Text
+  estimatedCost      Decimal   @db.Decimal(10, 2)
+  advancePaid        Decimal   @default(0) @db.Decimal(10, 2)
+  status             String    @default("received") @db.VarChar(30)
+  intakeDate         DateTime  @default(now()) @db.Timestamptz
+  deliveryPromiseDate DateTime @db.Timestamptz
+  deliveredAt        DateTime? @db.Timestamptz
+
+  business           Business  @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  customer           Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([businessId, repairNumber])
+  @@map("repair_jobs")
+}
+
+model CustomBookingOrder {
+  id                   String   @id @default(cuid())
+  businessId           String
+  customerId           String?
+  orderNumber          String   @db.VarChar(50)
+  customerName         String   @db.VarChar(100)
+  customerPhone        String   @db.VarChar(20)
+  ornamentType         String   @db.VarChar(100)
+  targetGrossWeight    Decimal  @db.Decimal(10, 3)
+  purity               String   @db.VarChar(10)
+  lockedGoldRatePer10g Decimal? @db.Decimal(12, 2)
+  advanceAmountPaid    Decimal  @db.Decimal(12, 2)
+  estimatedTotalAmount Decimal  @db.Decimal(12, 2)
+  deliveryPromiseDate  DateTime @db.Timestamptz
+  status               String   @default("placed") @db.VarChar(30)
+  createdAt            DateTime @default(now()) @db.Timestamptz
+
+  business             Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  customer             Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([businessId, orderNumber])
+  @@map("custom_booking_orders")
+}
+
+// ==========================================
+// 11. STAFF & PAYROLL
+// ==========================================
+
+model StaffMember {
+  id             String         @id @default(cuid())
+  businessId     String
+  name           String         @db.VarChar(100)
+  phone          String         @db.VarChar(20)
+  role           String         @db.VarChar(50)
+  monthlySalary  Decimal        @db.Decimal(10, 2)
+  advanceBalance Decimal        @default(0) @db.Decimal(10, 2)
+  joiningDate    DateTime       @default(now()) @db.Timestamptz
+  status         String         @default("active") @db.VarChar(20)
+
+  business       Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  payments       StaffPayment[]
+
+  @@map("staff_members")
+}
+
+model StaffPayment {
+  id          String      @id @default(cuid())
+  businessId  String
+  staffId     String
+  amount      Decimal     @db.Decimal(10, 2)
+  type        String      @db.VarChar(20) // "salary", "advance"
+  paymentMode String      @default("Cash") @db.VarChar(30)
+  monthYear   String?     @db.VarChar(20)
+  date        DateTime    @default(now()) @db.Timestamptz
+  notes       String?     @db.Text
+
+  business    Business    @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  staff       StaffMember @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@map("staff_payments")
+}
+
+// ==========================================
+// 12. DOUBLE-ENTRY ACCOUNTS, EXPENSES & CASH CLOSING
 // ==========================================
 
 enum AccountType {
@@ -485,8 +801,8 @@ enum AccountType {
 }
 
 model Account {
-  id             String        @id @default(uuid()) @db.Uuid
-  businessId     String        @db.Uuid
+  id             String        @id @default(cuid())
+  businessId     String
   code           String        @db.VarChar(20)
   name           String        @db.VarChar(100)
   type           AccountType
@@ -500,8 +816,8 @@ model Account {
 }
 
 model JournalEntry {
-  id            String        @id @default(uuid()) @db.Uuid
-  businessId    String        @db.Uuid
+  id            String        @id @default(cuid())
+  businessId    String
   voucherNumber String        @db.VarChar(50)
   date          DateTime      @default(now()) @db.Timestamptz
   description   String        @db.Text
@@ -513,9 +829,9 @@ model JournalEntry {
 }
 
 model JournalLine {
-  id             String       @id @default(uuid()) @db.Uuid
-  journalEntryId String       @db.Uuid
-  accountId      String       @db.Uuid
+  id             String       @id @default(cuid())
+  journalEntryId String
+  accountId      String
   debitAmount    Decimal      @default(0) @db.Decimal(12, 2)
   creditAmount   Decimal      @default(0) @db.Decimal(12, 2)
 
@@ -525,14 +841,56 @@ model JournalLine {
   @@map("journal_lines")
 }
 
+model ShopExpense {
+  id            String   @id @default(cuid())
+  businessId    String
+  category      String   @db.VarChar(100)
+  amount        Decimal  @db.Decimal(10, 2)
+  paymentMode   String   @db.VarChar(30)
+  paidTo        String   @db.VarChar(100)
+  voucherNumber String?  @db.VarChar(50)
+  date          DateTime @default(now()) @db.Timestamptz
+  notes         String?  @db.Text
+  recordedBy    String   @db.VarChar(100)
+
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+
+  @@map("shop_expenses")
+}
+
+model DailyCashClosing {
+  id               String   @id @default(cuid())
+  businessId       String
+  date             String   @db.VarChar(20)
+  openingCash      Decimal  @db.Decimal(12, 2)
+  cashSales        Decimal  @db.Decimal(12, 2)
+  cashAdvances     Decimal  @db.Decimal(12, 2)
+  supplierCashPaid Decimal  @db.Decimal(12, 2)
+  karigarCashPaid  Decimal  @db.Decimal(12, 2)
+  cashExpenses     Decimal  @db.Decimal(12, 2)
+  expectedCash     Decimal  @db.Decimal(12, 2)
+  physicalCash     Decimal  @db.Decimal(12, 2)
+  discrepancy      Decimal  @db.Decimal(12, 2)
+  status           String   @db.VarChar(20)
+  denominations    Json
+  closedBy         String   @db.VarChar(100)
+  closedAt         DateTime @default(now()) @db.Timestamptz
+  notes            String?  @db.Text
+
+  business         Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+
+  @@unique([businessId, date])
+  @@map("daily_cash_closings")
+}
+
 // ==========================================
-// 9. AUDIT LOGS
+// 13. AUDIT LOGS
 // ==========================================
 
 model AuditLog {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String?  @db.Uuid
-  action     String   @db.VarChar(100) // "DELETE_RATE", "OVERRIDE_MAKING", "MANUAL_DISCOUNT"
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String   @db.VarChar(100)
   entityType String   @db.VarChar(50)
   entityId   String   @db.VarChar(100)
   oldData    Json?
