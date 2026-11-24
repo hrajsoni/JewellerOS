@@ -1,13 +1,22 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Karigar,
   KarigarTransaction,
   IssueMetalInput,
   ReceiveOrnamentInput,
   PayLabourInput,
+  JobCard,
+  CreateJobCardInput,
+  JobCardStatus,
+  generateKarigarWhatsAppText,
 } from "../../modules/karigar/types";
+import {
+  getSavedJobCards,
+  createJobCard as storeCreateJobCard,
+  updateJobCardStatus as storeUpdateJobCardStatus,
+} from "../../modules/karigar/store";
 import { formatINR, formatGrams } from "../../lib/formatters";
 import { GlassPanel } from "../glass/GlassPanel";
 import { GlassButton } from "../glass/GlassButton";
@@ -19,19 +28,23 @@ import {
   Plus,
   Search,
   Scale,
-  ArrowDownLeft,
-  ArrowUpRight,
-  Coins,
   Receipt,
   Phone,
   MapPin,
   CheckCircle2,
   Calendar,
+  MessageCircle,
+  FileText,
+  Clock,
+  Sparkles,
+  ShieldCheck,
+  Send,
 } from "lucide-react";
 
 export interface KarigarManagerProps {
   karigars: Karigar[];
   transactions: KarigarTransaction[];
+  jobCards?: JobCard[];
   onAddKarigar: (input: {
     name: string;
     phone: string;
@@ -42,26 +55,47 @@ export interface KarigarManagerProps {
   onIssueMetal: (input: IssueMetalInput) => void;
   onReceiveOrnament: (input: ReceiveOrnamentInput) => void;
   onPayLabour: (input: PayLabourInput) => void;
+  onCreateJobCard?: (input: CreateJobCardInput) => void;
+  onUpdateJobCardStatus?: (jobCardId: string, status: JobCardStatus, huid?: string) => void;
   shopName: string;
+  tenantId?: string;
 }
 
 export const KarigarManager: React.FC<KarigarManagerProps> = ({
   karigars,
   transactions,
+  jobCards: initialJobCards,
   onAddKarigar,
   onIssueMetal,
   onReceiveOrnament,
   onPayLabour,
+  onCreateJobCard,
+  onUpdateJobCardStatus,
   shopName,
+  tenantId,
 }) => {
-  const [activeTab, setActiveTab] = useState<"directory" | "transactions">("directory");
+  const [activeTab, setActiveTab] = useState<"directory" | "jobcards" | "transactions">("directory");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Job Cards internal state (synchronized with prop or local store)
+  const [jobCards, setJobCards] = useState<JobCard[]>(() => {
+    return initialJobCards || getSavedJobCards(tenantId);
+  });
+
+  useEffect(() => {
+    if (initialJobCards) {
+      setJobCards(initialJobCards);
+    } else {
+      setJobCards(getSavedJobCards(tenantId));
+    }
+  }, [initialJobCards, tenantId]);
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
   const [isPayLabourModalOpen, setIsPayLabourModalOpen] = useState(false);
+  const [isJobCardModalOpen, setIsJobCardModalOpen] = useState(false);
   const [selectedKarigar, setSelectedKarigar] = useState<Karigar | null>(null);
 
   // Add Karigar State
@@ -77,6 +111,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
   const [issuePurity, setIssuePurity] = useState("24K Fine Bar (99.9%)");
   const [issueFineWeight, setIssueFineWeight] = useState("50.0");
   const [issueOrderName, setIssueOrderName] = useState("22K Bangle Set Order");
+  const [issueJobCardId, setIssueJobCardId] = useState("");
   const [issueNotes, setIssueNotes] = useState("");
 
   // Receive Goods State
@@ -87,6 +122,8 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
   const [rcvPurity, setRcvPurity] = useState("22K (91.6%)");
   const [rcvFineDeduction, setRcvFineDeduction] = useState("44.45"); // net * 0.9167
   const [rcvLabourCharges, setRcvLabourCharges] = useState("8500");
+  const [rcvJobCardId, setRcvJobCardId] = useState("");
+  const [rcvHuid, setRcvHuid] = useState("");
   const [rcvNotes, setRcvNotes] = useState("");
 
   // Pay Labour State
@@ -94,11 +131,32 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
   const [payMethod, setPayMethod] = useState<"Cash" | "UPI" | "Bank">("Cash");
   const [payNotes, setPayNotes] = useState("");
 
+  // New Job Card State
+  const [jcKarigarId, setJcKarigarId] = useState(karigars[0]?.id || "");
+  const [jcCustomerName, setJcCustomerName] = useState("");
+  const [jcCustomerPhone, setJcCustomerPhone] = useState("");
+  const [jcCategory, setJcCategory] = useState("Bangles");
+  const [jcTitle, setJcTitle] = useState("");
+  const [jcDescription, setJcDescription] = useState("");
+  const [jcMetal, setJcMetal] = useState<"gold" | "silver">("gold");
+  const [jcTargetGross, setJcTargetGross] = useState("45.0");
+  const [jcTargetNet, setJcTargetNet] = useState("44.0");
+  const [jcPurity, setJcPurity] = useState("22K (916)");
+  const [jcIssuedFine, setJcIssuedFine] = useState("45.0");
+  const [jcDeliveryDate, setJcDeliveryDate] = useState(
+    new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0]
+  );
+  const [jcLabourRate, setJcLabourRate] = useState("450");
+  const [jcLabourType, setJcLabourType] = useState<"per_gram" | "fixed">("per_gram");
+  const [jcAllowedWastage, setJcAllowedWastage] = useState("1.2");
+  const [jcNotes, setJcNotes] = useState("");
+
   // Aggregates
   const totalGoldWithKarigars = karigars.reduce((sum, k) => sum + k.pureGoldBalanceGrams, 0);
   const totalSilverWithKarigars = karigars.reduce((sum, k) => sum + k.pureSilverBalanceGrams, 0);
   const totalLabourDue = karigars.reduce((sum, k) => sum + k.labourBalanceDue, 0);
 
+  // Filtered lists
   const filteredKarigars = karigars.filter((k) => {
     const q = searchQuery.toLowerCase();
     return (
@@ -109,6 +167,18 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
     );
   });
 
+  const filteredJobCards = jobCards.filter((jc) => {
+    const q = searchQuery.toLowerCase();
+    return (
+      jc.title.toLowerCase().includes(q) ||
+      jc.jobCardNumber.toLowerCase().includes(q) ||
+      jc.karigarName.toLowerCase().includes(q) ||
+      (jc.customerName && jc.customerName.toLowerCase().includes(q)) ||
+      jc.category.toLowerCase().includes(q)
+    );
+  });
+
+  // Action handlers
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
@@ -133,6 +203,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
       purity: issuePurity,
       fineWeight: parseFloat(issueFineWeight) || 0,
       ornamentOrderName: issueOrderName,
+      jobCardId: issueJobCardId || undefined,
       notes: issueNotes,
     });
     setIsIssueModalOpen(false);
@@ -150,8 +221,13 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
       purity: rcvPurity,
       fineWeightDeducted: parseFloat(rcvFineDeduction) || 0,
       labourCharges: parseFloat(rcvLabourCharges) || 0,
+      jobCardId: rcvJobCardId || undefined,
+      huid: rcvHuid.trim() || undefined,
       notes: rcvNotes,
     });
+    if (rcvJobCardId) {
+      handleStatusChange(rcvJobCardId, "completed", rcvHuid.trim());
+    }
     setIsReceiveModalOpen(false);
   };
 
@@ -168,6 +244,62 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
     setPayAmount("");
   };
 
+  const handleCreateJobCardSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const assigned = karigars.find((k) => k.id === jcKarigarId);
+    const karigarName = assigned ? assigned.name : "Assigned Karigar";
+
+    const input: CreateJobCardInput = {
+      karigarId: jcKarigarId,
+      karigarName,
+      customerName: jcCustomerName.trim() || undefined,
+      customerPhone: jcCustomerPhone.trim() || undefined,
+      category: jcCategory,
+      title: jcTitle.trim(),
+      description: jcDescription.trim(),
+      metal: jcMetal,
+      targetGrossWeight: parseFloat(jcTargetGross) || 0,
+      targetNetWeight: parseFloat(jcTargetNet) || 0,
+      purity: jcPurity,
+      issuedFineWeightGrams: parseFloat(jcIssuedFine) || 0,
+      expectedDeliveryDate: jcDeliveryDate,
+      labourRate: parseFloat(jcLabourRate) || 0,
+      labourType: jcLabourType,
+      allowedWastagePercent: parseFloat(jcAllowedWastage) || 0,
+      notes: jcNotes.trim() || undefined,
+    };
+
+    if (onCreateJobCard) {
+      onCreateJobCard(input);
+    } else {
+      const created = storeCreateJobCard(input, tenantId);
+      setJobCards((prev) => [created, ...prev]);
+    }
+
+    setIsJobCardModalOpen(false);
+    setJcTitle("");
+    setJcDescription("");
+  };
+
+  const handleStatusChange = (jobCardId: string, status: JobCardStatus, huid?: string) => {
+    if (onUpdateJobCardStatus) {
+      onUpdateJobCardStatus(jobCardId, status, huid);
+    } else {
+      storeUpdateJobCardStatus(jobCardId, status, huid, tenantId);
+      setJobCards((prev) =>
+        prev.map((jc) => (jc.id === jobCardId ? { ...jc, status, huid: huid || jc.huid } : jc))
+      );
+    }
+  };
+
+  const dispatchWhatsAppStatement = (karigar: Karigar) => {
+    const karigarTxns = transactions.filter((t) => t.karigarId === karigar.id);
+    const message = generateKarigarWhatsAppText(karigar, shopName, karigarTxns);
+    const cleanPhone = karigar.phone.replace(/[^0-9]/g, "");
+    const encoded = encodeURIComponent(message);
+    window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`, "_blank");
+  };
+
   return (
     <div className="w-full space-y-6">
       {/* Top Header */}
@@ -178,22 +310,30 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
               <Hammer size={18} />
             </span>
             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
-              Karigar Ledger (कारीगर व मजदूरी खाता)
+              Karigar & Manufacturing (कारीगर व निर्माण खाता)
             </h1>
           </div>
           <p className="text-xs text-[var(--text-tertiary)] mt-1">
-            Goldsmith bullion issuance, finished goods receipt, wastage (घाटा) & artisan labour settlement for {shopName}
+            Pure bullion accounting, job cards, ghat/wastage (घाटा), HUID tracking & artisan labour for {shopName}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          <GlassButton
+            variant="gold-outline"
+            size="sm"
+            icon={<FileText size={15} />}
+            onClick={() => setIsJobCardModalOpen(true)}
+          >
+            + New Job Card (नया जॉब कार्ड)
+          </GlassButton>
           <GlassButton
             variant="primary"
             size="sm"
             icon={<Plus size={15} />}
             onClick={() => setIsAddModalOpen(true)}
           >
-            + Add New Karigar (नया कारीगर)
+            + Add Karigar (कारीगर)
           </GlassButton>
         </div>
       </div>
@@ -202,7 +342,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-xl bg-[var(--surface-primary)] border border-white/[0.06] space-y-1">
           <span className="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-            Pure Gold in Karigar Hands (कारीगर के पास सोना)
+            Pure Gold with Karigars (कारीगर के पास शुद्ध सोना)
           </span>
           <div className="text-2xl font-semibold text-[#DFC488] num-tabular">
             {formatGrams(totalGoldWithKarigars)}
@@ -214,13 +354,14 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
 
         <div className="p-5 rounded-xl bg-[var(--surface-primary)] border border-white/[0.06] space-y-1">
           <span className="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-            Pure Silver in Hands (कारीगर के पास चांदी)
+            Active Job Cards (सक्रिय निर्माण आदेश)
           </span>
           <div className="text-2xl font-semibold text-[var(--text-primary)] num-tabular">
-            {formatGrams(totalSilverWithKarigars)}
+            {jobCards.filter((jc) => jc.status !== "delivered" && jc.status !== "cancelled").length}{" "}
+            Orders
           </div>
           <span className="text-[11px] text-[var(--text-secondary)] block">
-            Silversmith bullion balance
+            {jobCards.filter((jc) => jc.status === "in_production").length} currently in casting & setting
           </span>
         </div>
 
@@ -238,13 +379,13 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
 
         <div className="p-5 rounded-xl bg-[var(--surface-primary)] border border-white/[0.06] space-y-1">
           <span className="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-            Total Artisans (कारीगर संख्या)
+            Pure Silver Balance (कारीगर के पास चांदी)
           </span>
           <div className="text-2xl font-semibold text-[var(--text-primary)] num-tabular">
-            {karigars.filter((k) => k.status === "active").length} Active
+            {formatGrams(totalSilverWithKarigars)}
           </div>
           <span className="text-[11px] text-[var(--text-tertiary)] block">
-            Bengali masters & local goldsmiths
+            Silversmith fine balance
           </span>
         </div>
       </div>
@@ -260,7 +401,17 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
                 : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             }`}
           >
-            Artisan Directory & Metal Balances ({karigars.length})
+            Artisans & Balances ({karigars.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("jobcards")}
+            className={`px-3 py-1 rounded text-xs transition-colors ${
+              activeTab === "jobcards"
+                ? "bg-[#C5A059]/20 text-[#DFC488] font-semibold"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Job Cards / Manufacturing ({jobCards.length})
           </button>
           <button
             onClick={() => setActiveTab("transactions")}
@@ -270,7 +421,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
                 : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             }`}
           >
-            Bullion & Goods Ledger History ({transactions.length})
+            Bullion Ledger History ({transactions.length})
           </button>
         </div>
 
@@ -281,7 +432,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
           />
           <input
             type="text"
-            placeholder="Search karigar, specialty, city..."
+            placeholder="Search karigar, job card, ornament..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg bg-black/30 border border-white/[0.08] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[#C5A059]/60"
@@ -289,7 +440,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
         </div>
       </div>
 
-      {/* View: Karigar Directory */}
+      {/* View 1: Karigar Directory */}
       {activeTab === "directory" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredKarigars.map((k) => (
@@ -335,7 +486,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
               </div>
 
               {/* Action Buttons for this Karigar */}
-              <div className="grid grid-cols-3 gap-1.5 pt-1">
+              <div className="grid grid-cols-2 gap-1.5 pt-1">
                 <GlassButton
                   variant="gold-outline"
                   size="sm"
@@ -360,6 +511,9 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
                 >
                   + Receive
                 </GlassButton>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
                 <GlassButton
                   variant="ghost"
                   size="sm"
@@ -373,13 +527,173 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
                 >
                   Pay Labour
                 </GlassButton>
+                <GlassButton
+                  variant="ghost"
+                  size="sm"
+                  icon={<MessageCircle size={13} className="text-[#25D366]" />}
+                  className="text-[11px] py-1 px-1.5 font-medium text-[#25D366] hover:bg-[#25D366]/10"
+                  onClick={() => dispatchWhatsAppStatement(k)}
+                  title="Send Karigar hisab statement on WhatsApp"
+                >
+                  WhatsApp
+                </GlassButton>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* View: Transactions History */}
+      {/* View 2: Manufacturing Job Cards */}
+      {activeTab === "jobcards" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredJobCards.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-xs text-[var(--text-tertiary)] bg-[var(--surface-primary)] rounded-xl border border-white/[0.06]">
+                No job cards found. Click &quot;+ New Job Card&quot; to issue custom ornament orders.
+              </div>
+            ) : (
+              filteredJobCards.map((jc) => {
+                const statusVariant: "emerald" | "gold" | "coral" | "neutral" =
+                  jc.status === "completed" || jc.status === "delivered"
+                    ? "emerald"
+                    : jc.status === "in_production"
+                    ? "gold"
+                    : jc.status === "cancelled"
+                    ? "coral"
+                    : "neutral";
+
+                return (
+                  <div
+                    key={jc.id}
+                    className="p-5 rounded-xl bg-[var(--surface-primary)] border border-white/[0.06] hover:border-[#C5A059]/40 transition-all space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs font-bold text-[#DFC488]">
+                            {jc.jobCardNumber}
+                          </span>
+                          <span className="text-[10px] text-[var(--text-tertiary)] font-mono">
+                            {jc.category}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-semibold text-[var(--text-primary)] mt-0.5">
+                          {jc.title}
+                        </h4>
+                      </div>
+                      <GlassBadge variant={statusVariant} size="sm">
+                        {jc.status.replace("_", " ")}
+                      </GlassBadge>
+                    </div>
+
+                    <p className="text-xs text-[var(--text-secondary)] line-clamp-2">
+                      {jc.description}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-black/40 border border-white/[0.04] text-[11px]">
+                      <div>
+                        <span className="text-[10px] text-[var(--text-tertiary)] block">
+                          Assigned Artisan
+                        </span>
+                        <span className="font-medium text-[var(--text-primary)]">
+                          {jc.karigarName}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-[var(--text-tertiary)] block">
+                          Target Net Wt (Purity)
+                        </span>
+                        <span className="font-mono font-bold text-[#DFC488]">
+                          {jc.targetNetWeight.toFixed(3)}g ({jc.purity})
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-[var(--text-tertiary)] block">
+                          Issued Fine Bullion
+                        </span>
+                        <span className="font-mono text-[var(--text-primary)]">
+                          {jc.issuedFineWeightGrams.toFixed(3)}g Pure
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-[var(--text-tertiary)] block">
+                          Due Date
+                        </span>
+                        <span className="font-mono text-[var(--text-primary)] flex items-center gap-1">
+                          <Calendar size={10} /> {new Date(jc.expectedDeliveryDate).toLocaleDateString("en-IN")}
+                        </span>
+                      </div>
+                    </div>
+
+                    {jc.customerName && (
+                      <div className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-1">
+                        <span>For Client:</span>
+                        <strong className="text-[var(--text-secondary)]">{jc.customerName}</strong>
+                        {jc.customerPhone && <span>({jc.customerPhone})</span>}
+                      </div>
+                    )}
+
+                    {jc.huid && (
+                      <div className="flex items-center gap-1 text-[11px] text-[var(--accent-emerald)] font-mono">
+                        <ShieldCheck size={12} /> BIS HUID: {jc.huid}
+                      </div>
+                    )}
+
+                    {/* Status Advance Controls */}
+                    <div className="flex items-center justify-between pt-1 border-t border-white/[0.04] text-xs">
+                      <span className="text-[10px] text-[var(--text-tertiary)]">Status:</span>
+                      <div className="flex items-center gap-1">
+                        {jc.status === "created" && (
+                          <button
+                            onClick={() => handleStatusChange(jc.id, "in_production")}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#C5A059]/20 text-[#DFC488] hover:bg-[#C5A059]/30"
+                          >
+                            Start Production →
+                          </button>
+                        )}
+                        {jc.status === "in_production" && (
+                          <button
+                            onClick={() => handleStatusChange(jc.id, "hallmarking")}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
+                          >
+                            Send for BIS Hallmarking →
+                          </button>
+                        )}
+                        {jc.status === "hallmarking" && (
+                          <button
+                            onClick={() => {
+                              const huidPrompt = prompt("Enter BIS Hallmarking HUID (6-digit alphanumeric):");
+                              handleStatusChange(jc.id, "completed", huidPrompt || "HM916-OK");
+                            }}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--accent-emerald)]/20 text-[var(--accent-emerald)] hover:bg-[var(--accent-emerald)]/30"
+                          >
+                            Complete & Verify HUID ✓
+                          </button>
+                        )}
+                        {jc.status === "completed" && (
+                          <button
+                            onClick={() => handleStatusChange(jc.id, "delivered")}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                          >
+                            Mark Delivered
+                          </button>
+                        )}
+                        {jc.status === "delivered" && (
+                          <span className="text-[10px] text-[var(--accent-emerald)] font-semibold flex items-center gap-1">
+                            <CheckCircle2 size={11} /> Delivered
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* View 3: Transactions History */}
       {activeTab === "transactions" && (
         <GlassPanel className="p-0 overflow-hidden">
           {/* Desktop Table */}
@@ -390,7 +704,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
                   <th className="py-3 px-4 font-semibold">Date & Txn</th>
                   <th className="py-3 px-4 font-semibold">Karigar</th>
                   <th className="py-3 px-4 font-semibold">Type</th>
-                  <th className="py-3 px-4 font-semibold">Item / Order</th>
+                  <th className="py-3 px-4 font-semibold">Item / Job Card</th>
                   <th className="py-3 px-4 font-semibold text-right">Fine Metal Impact</th>
                   <th className="py-3 px-4 font-semibold text-right">Labour / Payment</th>
                   <th className="py-3 px-4 font-semibold">Remarks</th>
@@ -508,8 +822,16 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
                     <span className="text-[var(--text-secondary)]">{t.ornamentName || "Fine Metal"}</span>
                     <div className="font-mono text-right">
                       {t.fineWeightDelta !== 0 && (
-                        <span className={t.fineWeightDelta > 0 ? "text-[#DFC488] font-bold" : "text-[var(--accent-emerald)] font-bold"}>
-                          {t.fineWeightDelta > 0 ? `+${formatGrams(t.fineWeightDelta)}` : formatGrams(t.fineWeightDelta)}
+                        <span
+                          className={
+                            t.fineWeightDelta > 0
+                              ? "text-[#DFC488] font-bold"
+                              : "text-[var(--accent-emerald)] font-bold"
+                          }
+                        >
+                          {t.fineWeightDelta > 0
+                            ? `+${formatGrams(t.fineWeightDelta)}`
+                            : formatGrams(t.fineWeightDelta)}
                         </span>
                       )}
                       {t.labourAmount ? (
@@ -592,7 +914,181 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
         </GlassDialog>
       )}
 
-      {/* Modal 2: Issue Metal to Karigar */}
+      {/* Modal 2: Create Job Card */}
+      {isJobCardModalOpen && (
+        <GlassDialog
+          isOpen={isJobCardModalOpen}
+          onClose={() => setIsJobCardModalOpen(false)}
+          title="Create Manufacturing Job Card (नया निर्माण आदेश)"
+          description="Issue custom ornament design order to an artisan with target weights & allowed wastage."
+          maxWidth="lg"
+        >
+          <form onSubmit={handleCreateJobCardSubmit} className="space-y-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                  Assign to Karigar *
+                </label>
+                <select
+                  value={jcKarigarId}
+                  onChange={(e) => setJcKarigarId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)]"
+                  required
+                >
+                  {karigars.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.name} ({k.specialty})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                  Ornament Category *
+                </label>
+                <select
+                  value={jcCategory}
+                  onChange={(e) => setJcCategory(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)]"
+                >
+                  <option value="Bangles">Bangles (कंगन / चूड़ियां)</option>
+                  <option value="Necklace">Necklace / Choker (हार)</option>
+                  <option value="Ring">Rings / Angoothi (अंगूठी)</option>
+                  <option value="Chains">Chains / Mangalsutra (चेन)</option>
+                  <option value="Earrings">Earrings / Jhumki (झुमकी)</option>
+                  <option value="Kundan Meena">Kundan Meena Jadau (जड़ाऊ)</option>
+                  <option value="Silver Utensils">Silver Utensils / Idols (बर्तन/मूर्ति)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <GlassInput
+                label="Job Card Title *"
+                placeholder="e.g. 22K Traditional Die Bangles (4 pcs)"
+                value={jcTitle}
+                onChange={(e) => setJcTitle(e.target.value)}
+                required
+              />
+              <GlassInput
+                label="Customer Reference (Optional)"
+                placeholder="e.g. Mrs. Sunita Sharma (+91 98290...)"
+                value={jcCustomerName}
+                onChange={(e) => setJcCustomerName(e.target.value)}
+              />
+            </div>
+
+            <GlassInput
+              label="Design Specifications & Details *"
+              placeholder="e.g. Floral motif, 2-6 size, heavy safety clasp, syndicate uncut polki..."
+              value={jcDescription}
+              onChange={(e) => setJcDescription(e.target.value)}
+              required
+            />
+
+            <div className="grid grid-cols-3 gap-3">
+              <GlassInput
+                label="Target Gross Wt (g) *"
+                type="number"
+                step="0.001"
+                value={jcTargetGross}
+                onChange={(e) => setJcTargetGross(e.target.value)}
+                required
+              />
+              <GlassInput
+                label="Target Net Wt (g) *"
+                type="number"
+                step="0.001"
+                value={jcTargetNet}
+                onChange={(e) => setJcTargetNet(e.target.value)}
+                required
+              />
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                  Target Purity *
+                </label>
+                <select
+                  value={jcPurity}
+                  onChange={(e) => setJcPurity(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)]"
+                >
+                  <option value="22K (916)">22K (916 BIS Hallmark)</option>
+                  <option value="18K (750)">18K (750 Diamond Setting)</option>
+                  <option value="24K (999)">24K (999 Fine Bullion)</option>
+                  <option value="14K (585)">14K (585 Daily Wear)</option>
+                  <option value="925 Sterling">925 Sterling Silver</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <GlassInput
+                label="Initial Fine Gold Issued (g)"
+                type="number"
+                step="0.001"
+                value={jcIssuedFine}
+                onChange={(e) => setJcIssuedFine(e.target.value)}
+              />
+              <GlassInput
+                label="Agreed Labour (₹) *"
+                type="number"
+                value={jcLabourRate}
+                onChange={(e) => setJcLabourRate(e.target.value)}
+                required
+              />
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                  Labour Type
+                </label>
+                <select
+                  value={jcLabourType}
+                  onChange={(e) => setJcLabourType(e.target.value as any)}
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)]"
+                >
+                  <option value="per_gram">₹ Per Gram (प्रति ग्राम)</option>
+                  <option value="fixed">Fixed Lump Sum (एकमुश्त)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <GlassInput
+                label="Allowed Wastage Ghat (%)"
+                type="number"
+                step="0.1"
+                value={jcAllowedWastage}
+                onChange={(e) => setJcAllowedWastage(e.target.value)}
+              />
+              <GlassInput
+                label="Expected Delivery Date *"
+                type="date"
+                value={jcDeliveryDate}
+                onChange={(e) => setJcDeliveryDate(e.target.value)}
+                required
+              />
+            </div>
+
+            <GlassInput
+              label="Special Instructions / Sample Ref"
+              placeholder="Reference sketch photo in ledger, urgent wedding order..."
+              value={jcNotes}
+              onChange={(e) => setJcNotes(e.target.value)}
+            />
+
+            <div className="flex justify-end gap-2 pt-2">
+              <GlassButton variant="ghost" type="button" onClick={() => setIsJobCardModalOpen(false)}>
+                Cancel
+              </GlassButton>
+              <GlassButton variant="primary" type="submit">
+                Create & Issue Job Card
+              </GlassButton>
+            </div>
+          </form>
+        </GlassDialog>
+      )}
+
+      {/* Modal 3: Issue Metal to Karigar */}
       {isIssueModalOpen && selectedKarigar && (
         <GlassDialog
           isOpen={isIssueModalOpen}
@@ -654,6 +1150,32 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
               />
             </div>
 
+            <div>
+              <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                Link to Job Card (Optional)
+              </label>
+              <select
+                value={issueJobCardId}
+                onChange={(e) => {
+                  setIssueJobCardId(e.target.value);
+                  const matched = jobCards.find((jc) => jc.id === e.target.value);
+                  if (matched) {
+                    setIssueOrderName(`Job Card #${matched.jobCardNumber} (${matched.title})`);
+                  }
+                }}
+                className="w-full px-3 py-2 text-xs rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)]"
+              >
+                <option value="">-- No specific Job Card --</option>
+                {jobCards
+                  .filter((jc) => jc.karigarId === selectedKarigar.id)
+                  .map((jc) => (
+                    <option key={jc.id} value={jc.id}>
+                      {jc.jobCardNumber}: {jc.title}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
             <GlassInput
               label="Order Description / Job Slip"
               placeholder="e.g. Order #412 - 4 Pair 22K Bangles"
@@ -681,16 +1203,51 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
         </GlassDialog>
       )}
 
-      {/* Modal 3: Receive Goods from Karigar */}
+      {/* Modal 4: Receive Goods from Karigar */}
       {isReceiveModalOpen && selectedKarigar && (
         <GlassDialog
           isOpen={isReceiveModalOpen}
           onClose={() => setIsReceiveModalOpen(false)}
           title={`Receive Finished Ornaments from ${selectedKarigar.name} (माल जमा)`}
-          description="Weigh finished goods and deduct fine gold from karigar's ledger balance."
+          description="Weigh finished goods, adjust Ghat (घाटा), and deduct fine gold from karigar's balance."
           maxWidth="md"
         >
           <form onSubmit={handleReceiveSubmit} className="space-y-4 text-xs">
+            <div>
+              <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                Link to Job Card (Optional)
+              </label>
+              <select
+                value={rcvJobCardId}
+                onChange={(e) => {
+                  setRcvJobCardId(e.target.value);
+                  const matched = jobCards.find((jc) => jc.id === e.target.value);
+                  if (matched) {
+                    setRcvOrnamentName(matched.title);
+                    setRcvGrossWeight(matched.targetGrossWeight.toString());
+                    setRcvNetWeight(matched.targetNetWeight.toString());
+                    const net = matched.targetNetWeight;
+                    setRcvFineDeduction((net * (22 / 24)).toFixed(3));
+                    const labour =
+                      matched.labourType === "per_gram"
+                        ? Math.round(net * matched.labourRate)
+                        : matched.labourRate;
+                    setRcvLabourCharges(labour.toString());
+                  }
+                }}
+                className="w-full px-3 py-2 text-xs rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)]"
+              >
+                <option value="">-- No specific Job Card --</option>
+                {jobCards
+                  .filter((jc) => jc.karigarId === selectedKarigar.id && jc.status !== "delivered")
+                  .map((jc) => (
+                    <option key={jc.id} value={jc.id}>
+                      {jc.jobCardNumber}: {jc.title} ({jc.status})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
             <GlassInput
               label="Ornament Name / Order Ref *"
               placeholder="e.g. 22K Solid Bangles (Pair)"
@@ -709,7 +1266,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
                 required
               />
               <GlassInput
-                label="Net Weight (g) *"
+                label="Net Metal Weight (g) *"
                 type="number"
                 step="0.001"
                 value={rcvNetWeight}
@@ -741,12 +1298,20 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
               />
             </div>
 
-            <GlassInput
-              label="Hallmark / HUID / Remarks"
-              placeholder="HUID verified, 0.4g scrap dust returned..."
-              value={rcvNotes}
-              onChange={(e) => setRcvNotes(e.target.value)}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <GlassInput
+                label="BIS Hallmarking HUID (6-digit)"
+                placeholder="e.g. HA916Z"
+                value={rcvHuid}
+                onChange={(e) => setRcvHuid(e.target.value)}
+              />
+              <GlassInput
+                label="Remarks / Ghat (घाटा)"
+                placeholder="Passed hallmark, 0.2g scrap returned..."
+                value={rcvNotes}
+                onChange={(e) => setRcvNotes(e.target.value)}
+              />
+            </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <GlassButton variant="ghost" type="button" onClick={() => setIsReceiveModalOpen(false)}>
@@ -760,7 +1325,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
         </GlassDialog>
       )}
 
-      {/* Modal 4: Pay Labour to Karigar */}
+      {/* Modal 5: Pay Labour to Karigar */}
       {isPayLabourModalOpen && selectedKarigar && (
         <GlassDialog
           isOpen={isPayLabourModalOpen}

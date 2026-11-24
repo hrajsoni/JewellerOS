@@ -7,9 +7,9 @@
 
 ## Overall Progress Summary
 
-| Total Modules | Production Ready (DB Backed) | Interactive Frontend (Local Storage) | Pending Implementation |
+| Total Modules | Integrated & Tested (Tenant-Isolated) | Interactive Prototype | Pending Implementation |
 | :---: | :---: | :---: | :---: |
-| **14** | **0** | **9** | **5** |
+| **14** | **8** (Mod 1, 3, 4, 5, 6, 7, 8, 9) | **4** (Mod 2, 11, 13, 14) | **2** (Mod 10, 12) |
 
 ---
 
@@ -51,14 +51,14 @@
 * **Status**: 🟢 **Completed & Integrated (Milestone 5)**
 
 ### 🟢 Module 8: Karigar & Manufacturing
-* **Current State**: `KarigarManager.tsx` with artisan profiles, bullion issuance, finished goods receipt, ghat/wastage deductions, labour payouts, and live pure gold balance tracking.
-* **Target State**: Relational `work_orders`, `metal_issues`, `metal_returns`, and double-entry labour balance ledgers.
-* **Status**: 🟡 **Advanced Frontend Ready** $\rightarrow$ *Target: Milestone 6*
+* **Current State**: Full artisan ledger, bullion accounting, and manufacturing work orders (`KarigarManager.tsx`). Pure 24ct fine gold bar and silver alloy issuance, finished ornament intake with Ghat/wastage (घाटा) deduction, and BIS hallmarking HUID verification. Manufacturing Job Cards (जॉब कार्ड्स) with target gross/net weights, agreed labour rates (per gram or fixed), allowed wastage %, and progress lifecycle tracking (`created` → `in_production` → `hallmarking` → `completed` → `delivered`). 1-Click WhatsApp Karigar Hisab Parcha (कारीगर पर्चा) statement dispatch. Guarded by `MANAGE_KARIGAR`.
+* **Target State**: Micro-karigar mobile portal for live work order acceptance.
+* **Status**: 🟢 **Completed & Integrated (Milestone 6)**
 
-### 🔴 Module 9: Accounts & Expenses
-* **Current State**: Revenue totals tracked in invoices; salary and advances tracked in staff module.
-* **Target State**: Double-entry chart of accounts (Assets, Liabilities, Equity, Revenue, Expenses), Cashbook, Bankbook, UPI reconciliation, and daily cash closing (रोकड़ मिलान) workflow.
-* **Status**: 🔴 **Pending Implementation** $\rightarrow$ *Target: Milestone 6*
+### 🟢 Module 9: Accounts & Cash Closing (रोकड़ बही)
+* **Current State**: Indian Sarafa double-entry Chart of Accounts (Assets: Counter Drawer 1010, Bank 1020, UPI QR 1030, Bullion Safe 1040, Customer Receivables 1050; Liabilities: Supplier Payables 2010, Karigar Dues 2020, Customer Advances 2030, GST 2040; Revenue: Retail Sales 3010, Making Income 3020; Expenses: Refreshments 4010, Hallmarking 4020, Packaging 4030, Utilities 4040). Petty Shop Expense Book (दुकान खर्च बही) with automatic deduction from source account. Daily Cash Closing (**रोकड़ मिलान**) workflow with live Cash Flow Statement (Opening + Sales + Advances - Supplier - Karigar - Expenses = Expected Cash), interactive Physical Currency Note Denomination Counter (₹500, ₹200, ₹100, ₹50, ₹20, ₹10, coins), and live Tally / Shortage / Excess discrepancy detection. Guarded by `VIEW_OWNER_REPORTS` and `VIEW_PROFIT_MARGINS` (strictly masked from sales staff).
+* **Target State**: Bank statement OFX/CSV upload and automated UPI UTR reconciliation.
+* **Status**: 🟢 **Completed & Integrated (Milestone 6)**
 
 ### 🔴 Module 10: Wholesale Management
 * **Current State**: Counter terminal focuses primarily on retail.

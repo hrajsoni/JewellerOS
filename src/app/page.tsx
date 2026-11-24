@@ -80,15 +80,37 @@ import {
   IssueMetalInput,
   ReceiveOrnamentInput,
   PayLabourInput,
+  JobCard,
+  CreateJobCardInput,
+  JobCardStatus,
 } from "../modules/karigar/types";
 import {
   getSavedKarigars,
   getSavedKarigarTxns,
+  getSavedJobCards,
   addKarigar,
   issueMetalToKarigar,
   receiveOrnamentFromKarigar,
   payLabourToKarigar,
+  createJobCard,
+  updateJobCardStatus,
 } from "../modules/karigar/store";
+
+import { AccountsManager } from "../components/accounts/AccountsManager";
+import {
+  Account,
+  ShopExpense,
+  DailyCashClosing,
+  RecordExpenseInput,
+  RecordCashClosingInput,
+} from "../modules/accounts/types";
+import {
+  getSavedAccounts,
+  getSavedExpenses,
+  getSavedDailyClosings,
+  recordExpense,
+  recordDailyCashClosing,
+} from "../modules/accounts/store";
 
 import { StaffManager } from "../components/staff/StaffManager";
 import {
@@ -205,6 +227,12 @@ function WorkspaceMain() {
   // Karigar State
   const [karigars, setKarigars] = useState<Karigar[]>([]);
   const [karigarTxns, setKarigarTxns] = useState<KarigarTransaction[]>([]);
+  const [jobCards, setJobCards] = useState<JobCard[]>([]);
+
+  // Accounts & Daily Cash Closing State
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [expenses, setExpenses] = useState<ShopExpense[]>([]);
+  const [dailyClosings, setDailyClosings] = useState<DailyCashClosing[]>([]);
 
   // Staff State
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
@@ -236,6 +264,10 @@ function WorkspaceMain() {
     setGirviLoans(getSavedGirviLoans(tenant.id));
     setKarigars(getSavedKarigars(tenant.id));
     setKarigarTxns(getSavedKarigarTxns(tenant.id));
+    setJobCards(getSavedJobCards(tenant.id));
+    setAccounts(getSavedAccounts(tenant.id));
+    setExpenses(getSavedExpenses(tenant.id));
+    setDailyClosings(getSavedDailyClosings(tenant.id));
     setStaffList(getSavedStaff(tenant.id));
     setStaffPayments(getSavedStaffPayments(tenant.id));
     setSuppliers(getSavedSuppliers(tenant.id));
@@ -595,6 +627,31 @@ function WorkspaceMain() {
     setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
   };
 
+  const handleCreateJobCard = (input: CreateJobCardInput) => {
+    createJobCard(input, activeTenant.id);
+    setJobCards(getSavedJobCards(activeTenant.id));
+    setKarigars(getSavedKarigars(activeTenant.id));
+    setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
+  };
+
+  const handleUpdateJobCardStatus = (jobCardId: string, status: JobCardStatus, huid?: string) => {
+    updateJobCardStatus(jobCardId, status, huid, activeTenant.id);
+    setJobCards(getSavedJobCards(activeTenant.id));
+  };
+
+  // Accounts Actions
+  const handleRecordExpense = (input: RecordExpenseInput) => {
+    recordExpense(input, activeTenant.id);
+    setExpenses(getSavedExpenses(activeTenant.id));
+    setAccounts(getSavedAccounts(activeTenant.id));
+  };
+
+  const handleRecordClosing = (input: RecordCashClosingInput) => {
+    recordDailyCashClosing(input, activeTenant.id);
+    setDailyClosings(getSavedDailyClosings(activeTenant.id));
+    setAccounts(getSavedAccounts(activeTenant.id));
+  };
+
   // Staff Actions
   const handleAddStaffMember = (input: AddStaffInput) => {
     addStaffMember(input, activeTenant.id);
@@ -730,6 +787,7 @@ function WorkspaceMain() {
               { name: "Girvi / Gold Loans", href: "/girvi" },
               { name: "Karigar Ledger", href: "/karigar" },
               { name: "Staff & Payroll", href: "/staff" },
+              { name: "Accounts & Cashbook", href: "/accounts" },
               { name: "Dashboard", href: "/" },
               { name: "Inventory", href: "/inventory" },
               { name: "Customers", href: "/customers" },
@@ -943,16 +1001,41 @@ function WorkspaceMain() {
               <KarigarManager
                 karigars={karigars}
                 transactions={karigarTxns}
+                jobCards={jobCards}
                 onAddKarigar={handleAddKarigar}
                 onIssueMetal={handleIssueMetalToKarigar}
                 onReceiveOrnament={handleReceiveOrnamentFromKarigar}
                 onPayLabour={handlePayLabourToKarigar}
+                onCreateJobCard={handleCreateJobCard}
+                onUpdateJobCardStatus={handleUpdateJobCardStatus}
                 shopName={activeTenant.businessName}
+                tenantId={activeTenant.id}
               />
             ) : (
               <RestrictedModuleGuard
                 moduleName="Karigar & Artisan Ledger"
                 allowedRoles="Owner, Admin, Manager, Karigar Manager"
+              />
+            )
+          )}
+
+          {/* View: Accounts & Cash Closing (रोकड़ बही) */}
+          {activeTab === "/accounts" && (
+            hasPermission("VIEW_OWNER_REPORTS") ? (
+              <AccountsManager
+                accounts={accounts}
+                expenses={expenses}
+                dailyClosings={dailyClosings}
+                onRecordExpense={handleRecordExpense}
+                onRecordClosing={handleRecordClosing}
+                shopName={activeTenant.businessName}
+                tenantId={activeTenant.id}
+                currentUser={user ? `${user.fullName} (${user.role})` : "Harshit Raj (Owner)"}
+              />
+            ) : (
+              <RestrictedModuleGuard
+                moduleName="Accounts & Cashbook"
+                allowedRoles="Owner, Admin, Accountant"
               />
             )
           )}
