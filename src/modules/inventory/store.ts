@@ -394,19 +394,55 @@ export function lockInvoicedStockItems(
     role: "SALESPERSON",
   };
 
-  let hasChanges = false;
-  const updatedStock = currentStock.map((stockItem) => {
-    // Match by stockItemId, SKU, barcode, or exact item name if not already sold
-    const isSoldInThisBill = lineItems.some(
-      (item) =>
-        (item.stockItemId && item.stockItemId === stockItem.id) ||
-        (item.sku && item.sku === stockItem.sku) ||
-        (item.barcode && item.barcode === stockItem.barcode) ||
-        (item.name.toLowerCase() === stockItem.name.toLowerCase() && stockItem.status !== "sold")
-    );
+  const claimedStockIds = new Set<string>();
+  const itemsToMarkSold = new Map<string, StockItem>();
 
-    if (isSoldInThisBill && stockItem.status !== "sold") {
-      hasChanges = true;
+  for (const item of lineItems) {
+    let matchedItem: StockItem | undefined;
+
+    // 1. Direct stockItemId match
+    if (item.stockItemId) {
+      matchedItem = currentStock.find(
+        (s) => s.id === item.stockItemId && s.status !== "sold" && !claimedStockIds.has(s.id)
+      );
+    }
+
+    // 2. SKU match
+    if (!matchedItem && item.sku) {
+      matchedItem = currentStock.find(
+        (s) => s.sku === item.sku && s.status !== "sold" && !claimedStockIds.has(s.id)
+      );
+    }
+
+    // 3. Barcode match
+    if (!matchedItem && item.barcode) {
+      matchedItem = currentStock.find(
+        (s) => s.barcode === item.barcode && s.status !== "sold" && !claimedStockIds.has(s.id)
+      );
+    }
+
+    // 4. Exact name match fallback (claims exactly ONE unsold item per line item)
+    if (!matchedItem && item.name) {
+      matchedItem = currentStock.find(
+        (s) =>
+          s.name.toLowerCase() === item.name.toLowerCase() &&
+          s.status !== "sold" &&
+          !claimedStockIds.has(s.id)
+      );
+    }
+
+    if (matchedItem) {
+      claimedStockIds.add(matchedItem.id);
+      itemsToMarkSold.set(matchedItem.id, matchedItem);
+    }
+  }
+
+  if (itemsToMarkSold.size === 0) {
+    return currentStock;
+  }
+
+  const updatedStock = currentStock.map((stockItem) => {
+    if (itemsToMarkSold.has(stockItem.id)) {
       const oldStatus = stockItem.status;
       const oldLocation = stockItem.trayLocation;
       const newLocation = `Sold / Delivered (Invoice #${invoiceNumber})`;
@@ -438,10 +474,7 @@ export function lockInvoicedStockItems(
     return stockItem;
   });
 
-  if (hasChanges) {
-    saveStockItems(updatedStock, tenantId);
-  }
-
+  saveStockItems(updatedStock, tenantId);
   return updatedStock;
 }
 

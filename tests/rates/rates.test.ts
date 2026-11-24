@@ -72,4 +72,47 @@ describe("JewelleryOS Metal Rate Engine & Audit Ledger Tests", () => {
     assert.strictEqual(result.record.notes, "Morning Jaipur Sarafa Bazar Opening");
     assert.ok(result.record.timestamp);
   });
+
+  test("Multi-Tenant Isolation (DEF-014): Metal rates updated in one showroom do not contaminate another tenant", () => {
+    const tenantJaipur = "tenant-sandhya-jaipur";
+    const tenantMumbai = "tenant-zaveri-mumbai";
+
+    const sessionJaipur: UserSession = {
+      ...mockOwnerSession,
+      businessId: tenantJaipur,
+    };
+
+    const sessionMumbai: UserSession = {
+      id: "user-mumbai-mgr",
+      fullName: "Ketan Mehta",
+      email: "ketan@zaverimumbai.com",
+      phone: "+91 98200 99887",
+      role: "OWNER",
+      businessId: tenantMumbai,
+      businessName: "Zaveri Jewellers Mumbai",
+    };
+
+    // Jaipur sets gold24k to 155,000
+    recordNewMetalRates(
+      { gold24k: 155000, silver999PerKg: 98000, notes: "Jaipur Special" },
+      sessionJaipur,
+      tenantJaipur
+    );
+
+    // Mumbai sets gold24k to 152,000
+    recordNewMetalRates(
+      { gold24k: 152000, silver999PerKg: 96000, notes: "Mumbai Zaveri Bazar Special" },
+      sessionMumbai,
+      tenantMumbai
+    );
+
+    const jaipurHistory = getMetalRatesHistory(tenantJaipur);
+    const mumbaiHistory = getMetalRatesHistory(tenantMumbai);
+
+    assert.strictEqual(jaipurHistory[0].gold24k, 155000);
+    assert.strictEqual(jaipurHistory[0].businessId, tenantJaipur);
+
+    assert.strictEqual(mumbaiHistory[0].gold24k, 152000);
+    assert.strictEqual(mumbaiHistory[0].businessId, tenantMumbai);
+  });
 });

@@ -107,13 +107,59 @@ export const INITIAL_RATE_HISTORY: MetalRateRecord[] = [
   },
 ];
 
-export function getMetalRatesHistory(): MetalRateRecord[] {
-  if (typeof window === "undefined") return INITIAL_RATE_HISTORY;
+const inMemoryRatesCache: Record<string, string> = {};
+
+function getRatesStorageItem(key: string): string | null {
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return inMemoryRatesCache[key] ?? null;
+    }
+  }
+  return inMemoryRatesCache[key] ?? null;
+}
+
+function setRatesStorageItem(key: string, value: string): void {
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // ignore
+    }
+  }
+  inMemoryRatesCache[key] = value;
+}
+
+export const getRatesHistoryStorageKey = (tenantId?: string) =>
+  `jewellery_os_tenant_${tenantId || "default"}_metal_rates_history_v1`;
+
+export const getActiveRatesStorageKey = (tenantId?: string) =>
+  `jewellery_os_tenant_${tenantId || "default"}_active_metal_rates_v1`;
+
+export function getMetalRatesHistory(tenantId?: string): MetalRateRecord[] {
+  const historyKey = getRatesHistoryStorageKey(tenantId);
   try {
-    const raw = localStorage.getItem(RATES_HISTORY_STORAGE_KEY);
+    const raw = getRatesStorageItem(historyKey);
     if (!raw) {
-      localStorage.setItem(RATES_HISTORY_STORAGE_KEY, JSON.stringify(INITIAL_RATE_HISTORY));
-      return INITIAL_RATE_HISTORY;
+      // Check legacy global key if default tenant
+      if (!tenantId || tenantId === "default") {
+        const legacyRaw = getRatesStorageItem("jewellery_os_metal_rates_history_v1");
+        if (legacyRaw) {
+          const parsedLegacy = JSON.parse(legacyRaw);
+          if (Array.isArray(parsedLegacy) && parsedLegacy.length > 0) {
+            setRatesStorageItem(historyKey, legacyRaw);
+            return parsedLegacy;
+          }
+        }
+      }
+
+      const tenantHistory = INITIAL_RATE_HISTORY.map((r) => ({
+        ...r,
+        businessId: tenantId || r.businessId,
+      }));
+      setRatesStorageItem(historyKey, JSON.stringify(tenantHistory));
+      return tenantHistory;
     }
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_RATE_HISTORY;
@@ -122,18 +168,21 @@ export function getMetalRatesHistory(): MetalRateRecord[] {
   }
 }
 
-export function getLatestMetalRates(): MetalRateRecord {
-  const history = getMetalRatesHistory();
+export function getLatestMetalRates(tenantId?: string): MetalRateRecord {
+  const history = getMetalRatesHistory(tenantId);
   return history[0] || INITIAL_RATE_HISTORY[0];
 }
 
 export function recordNewMetalRates(
   input: UpdateMetalRatesInput,
-  session: UserSession
+  session: UserSession,
+  tenantId?: string
 ): { record: MetalRateRecord; error?: string } {
+  const activeTenantId = tenantId || session.businessId || "default";
+
   if (input.gold24k <= 0 || input.silver999PerKg <= 0) {
     return {
-      record: getLatestMetalRates(),
+      record: getLatestMetalRates(activeTenantId),
       error: "Metal rates must be positive numbers greater than 0.",
     };
   }
@@ -155,7 +204,7 @@ export function recordNewMetalRates(
 
   const newRecord: MetalRateRecord = {
     id: `rate-${Date.now()}`,
-    businessId: session.businessId || "tenant-sandhya-jaipur",
+    businessId: activeTenantId,
     timestamp: new Date().toISOString(),
     gold24k: input.gold24k,
     gold22k,
@@ -175,15 +224,13 @@ export function recordNewMetalRates(
     notes: input.notes || "Live Showroom Board Adjustment",
   };
 
-  if (typeof window !== "undefined") {
-    try {
-      const history = getMetalRatesHistory();
-      const updatedHistory = [newRecord, ...history];
-      localStorage.setItem(RATES_HISTORY_STORAGE_KEY, JSON.stringify(updatedHistory));
-      localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(newRecord));
-    } catch (err) {
-      console.error("Failed to persist updated metal rates:", err);
-    }
+  try {
+    const history = getMetalRatesHistory(activeTenantId);
+    const updatedHistory = [newRecord, ...history];
+    setRatesStorageItem(getRatesHistoryStorageKey(activeTenantId), JSON.stringify(updatedHistory));
+    setRatesStorageItem(getActiveRatesStorageKey(activeTenantId), JSON.stringify(newRecord));
+  } catch (err) {
+    console.error("Failed to persist updated metal rates:", err);
   }
 
   return { record: newRecord };

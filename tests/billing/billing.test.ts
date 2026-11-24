@@ -4,6 +4,7 @@ import {
   lockInvoicedStockItems,
   ingestOldGoldScrap,
   INITIAL_STOCK_ITEMS,
+  saveStockItems,
 } from "../../src/modules/inventory/store";
 import { StockItem } from "../../src/modules/inventory/types";
 import {
@@ -167,4 +168,85 @@ describe("JewelleryOS Milestone 4: Billing POS & Transaction Pipeline Tests", ()
       "Items with status 'sold' must be strictly blocked from being added to new billing cart"
     );
   });
+
+  test("Stock Locking Invariant (DEF-004): Selling 1 item by name when multiple identical items exist only marks exactly one as sold", () => {
+    const tenantId = "test-tenant-def-004";
+    const ring1: StockItem = {
+      id: "stock-ring-1",
+      sku: "RNG-22K-A1",
+      barcode: "8902200001",
+      name: "22K Floral Gold Ring",
+      category: "Rings",
+      metal: "gold",
+      purity: "22K",
+      purityDisplay: "22K (22/24)",
+      grossWeight: 4.5,
+      stoneWeight: 0,
+      netWeight: 4.5,
+      fineWeight: 4.125,
+      acquisitionCost: 45000,
+      defaultMakingType: "percentage",
+      defaultMakingValue: 18,
+      trayLocation: "Tray #1",
+      status: "in_showcase",
+      dateAdded: "2026-10-01",
+    };
+    const ring2: StockItem = {
+      id: "stock-ring-2",
+      sku: "RNG-22K-A2",
+      barcode: "8902200002",
+      name: "22K Floral Gold Ring", // Identical name!
+      category: "Rings",
+      metal: "gold",
+      purity: "22K",
+      purityDisplay: "22K (22/24)",
+      grossWeight: 4.5,
+      stoneWeight: 0,
+      netWeight: 4.5,
+      fineWeight: 4.125,
+      acquisitionCost: 45000,
+      defaultMakingType: "percentage",
+      defaultMakingValue: 18,
+      trayLocation: "Tray #1",
+      status: "in_showcase",
+      dateAdded: "2026-10-01",
+    };
+
+    saveStockItems([ring1, ring2], tenantId);
+
+    // Bill selling only 1 ring by name without passing stockItemId
+    const lineItems: InvoiceLineItem[] = [
+      {
+        id: "line-def004-1",
+        name: "22K Floral Gold Ring",
+        metal: "gold",
+        purity: "22K",
+        purityDisplay: "22K (22/24)",
+        grossWeight: 4.5,
+        stoneWeight: 0,
+        netWeight: 4.5,
+        metalRate: 150000,
+        effectiveRatePerGram: 13750,
+        metalValue: 61875,
+        makingType: "percentage",
+        makingRate: 18,
+        makingCharges: 11137.5,
+        stoneValue: 0,
+        discount: 0,
+        totalBeforeTax: 73012.5,
+        fineWeight: 4.125,
+        fineGoldValue24k: 61875,
+        wastagePercentage: 0,
+      },
+    ];
+
+    const updated = lockInvoicedStockItems(lineItems, "INV-DEF004-01", mockCashier, tenantId);
+
+    const soldCount = updated.filter((item) => item.status === "sold").length;
+    const inShowcaseCount = updated.filter((item) => item.status === "in_showcase").length;
+
+    assert.strictEqual(soldCount, 1, "Exactly one ring should be marked as sold");
+    assert.strictEqual(inShowcaseCount, 1, "The second ring must remain in_showcase");
+  });
 });
+
