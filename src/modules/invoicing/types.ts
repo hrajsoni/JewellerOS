@@ -49,6 +49,8 @@ export interface CustomerProfile {
   address?: string;
   city?: string;
   gstin?: string;
+  panNumber?: string;
+  aadhaarUid?: string;
 }
 
 export type PaymentMethod = "Cash" | "UPI" | "Card" | "Bank Transfer" | "Old Gold" | "Customer Credit";

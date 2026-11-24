@@ -9,7 +9,7 @@
 
 | Total Modules | Integrated & Tested (Tenant-Isolated) | Interactive Prototype | Pending Implementation |
 | :---: | :---: | :---: | :---: |
-| **14** | **11** (Mod 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12) | **3** (Mod 2, 13, 14) | **0** |
+| **14** | **13** (Mod 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13) | **1** (Mod 14) | **0** |
 
 ---
 
@@ -20,10 +20,10 @@
 * **Target State**: Full session tokens, password hashing, and server-side RBAC session guards.
 * **Status**: 🟢 **Completed & Integrated (Milestone 1)**
 
-### 🟡 Module 2: Dashboard
-* **Current State**: `FinancialOverview.tsx` renders live counter sales, recent invoices, stock summaries, and quick action shortcuts.
-* **Target State**: Role-differentiated dashboard (Owner View: gross profits, bank balances, metal balances, customer outstanding; Employee View: assigned counter bills, tasks, pending deliveries).
-* **Status**: 🟡 **Interactive Prototype** $\rightarrow$ *Target: Milestone 1 & 8*
+### 🟢 Module 2: Dashboard
+* **Current State**: Role-differentiated executive Sarafa command center and front-counter terminal (`FinancialOverview.tsx`). Executive view connects live showroom collections: today's sales turnover, real-time inventory retail valuation vs acquisition costs with unrealized gross margin %, pure fine 24ct gold & silver physical bullion in safe, working capital ledger matrix (Cash drawer, Bank current, UPI, customer udhar, supplier payables, karigar gold in artisan hands, deployed girvi pawn capital, and consignment memo goods). Operational radar tracking urgent bridal delivery promises, repairs in progress, and low-stock categories. Front-counter salesperson mode features instant barcode gun / SKU search and strictly masks all purchase costs, profit margins, bank balances, and supplier payables.
+* **Target State**: Push notifications for daily opening/closing digests and scheduled email summaries.
+* **Status**: 🟢 **Completed & Integrated (Milestone 8)**
 
 ### 🟢 Module 3: Metal Rate Management
 * **Current State**: Daily Sarafa Market Rates Board and historical price audit trail (`MetalRatesModal.tsx`). Real-time K/24 formula engine auto-deriving 22K (916), 18K (750), 14K (585) & Silver 925 from 24K benchmark. Old-gold exchange/buyback rate tracking. Immutable audit trail with employee attribution, source logging, and live ticker sync to Counter Calculator and Top Bar. Guarded by `MANAGE_METAL_RATES` (Sales staff in Read-Only Mode).
@@ -75,10 +75,10 @@
 * **Target State**: CAD design 3D rendering preview attachment and milestone progress SMS.
 * **Status**: 🟢 **Completed & Integrated (Milestone 7)**
 
-### 🟡 Module 13: Reports & Analytics
-* **Current State**: `ReportsOverview.tsx` with gross revenue, category breakdown, monthly margin graphs, and invoice registry.
-* **Target State**: Gross vs Net profit reports, slow-moving inventory analysis, GST GSTR-1 summaries, karigar metal outstanding summaries, and daily cash closing audits.
-* **Status**: 🟡 **Interactive Prototype** $\rightarrow$ *Target: Milestone 8*
+### 🟢 Module 13: Reports & Analytics (GSTR-1, P&L & Metal Audit)
+* **Current State**: Full multi-tab analytical audit suite (`ReportsOverview.tsx`). Tab 1: Sales & Turnover with time-range filtering (Today, 7 Days, Month, All Time), metal gross/fine weights, and payment mode allocation meters. Tab 2: GST & Tax Compliance Audit with GSTR-1 HSN 7113 summary table (taxable turnover, symmetric 1.5% CGST + 1.5% SGST), B2B vs B2C distribution, and Section 139A High-Value Transactions Audit (invoices ≥ ₹2,00,000 auditing mandatory PAN/Aadhaar capture). Tab 3: Physical Stock Valuation & Category Velocity with acquisition cost vs retail valuation and gross margin spreads. Tab 4: Sarafa Profit & Loss (P&L) Statement deducting operating shop expenses (refreshments, packaging, hallmarking HUID fees, rent, utilities) from craftsmanship income for estimated net operating profit. Tab 5: Karigar & Bullion Scrap Audit tracking pure bullion issued vs finished goods received and workshop melting loss. 1-Click Print Audit Pack for tax accountants.
+* **Target State**: Direct JSON export for Cleartax / GST Portal offline tool.
+* **Status**: 🟢 **Completed & Integrated (Milestone 8)**
 
 ### 🟡 Module 14: Settings & Business Configuration
 * **Current State**: Showroom profile and default metal rates editable in `page.tsx`.

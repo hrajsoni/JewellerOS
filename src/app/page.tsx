@@ -1020,8 +1020,21 @@ function WorkspaceMain() {
                   setActiveTab("/invoices");
                   setInvoicingSubTab("active");
                 }}
+                onNavigateTab={(href) => setActiveTab(href)}
                 invoices={invoices}
+                stockItems={stockItems}
+                customers={customers}
+                karigars={karigars}
+                suppliers={suppliers}
+                girviLoans={girviLoans}
+                repairs={repairs}
+                bookings={bookings}
+                memos={memos}
+                accounts={accounts}
+                gold24kRate={goldRate}
+                silverRate={silverRate}
                 onViewInvoice={handleViewInvoice}
+                shopName={activeTenant.businessName}
               />
             </div>
           )}
@@ -1200,9 +1213,16 @@ function WorkspaceMain() {
             hasPermission("VIEW_OWNER_REPORTS") ? (
               <ReportsOverview
                 invoices={invoices}
+                stockItems={stockItems}
+                expenses={expenses}
+                purchases={purchases}
+                karigars={karigars}
+                karigarTxns={karigarTxns}
                 currentGoldRate={goldRate}
                 currentSilverRate={silverRate}
                 onViewInvoice={handleViewInvoice}
+                shopName={activeTenant.businessName}
+                gstin={activeTenant.gstin}
               />
             ) : (
               <RestrictedModuleGuard
