@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { GirviLoan, NewGirviInput } from "../../modules/girvi/types";
+import { GirviLoan, NewGirviInput, generateGirviWhatsAppTicket } from "../../modules/girvi/types";
 import { calculateAccruedInterest } from "../../modules/girvi/store";
 import { formatINR, formatGrams } from "../../lib/formatters";
 import { GlassPanel } from "../glass/GlassPanel";
@@ -28,6 +28,7 @@ import {
   SlidersHorizontal,
   X,
   Filter,
+  MessageCircle,
 } from "lucide-react";
 
 export interface GirviManagerProps {
@@ -510,6 +511,19 @@ export const GirviManager: React.FC<GirviManagerProps> = ({
                             <Printer size={14} />
                           </button>
 
+                          <button
+                            onClick={() => {
+                              const text = generateGirviWhatsAppTicket(l, shopName, accrual);
+                              const cleanPhone = l.customerPhone.replace(/[^0-9]/g, "");
+                              const encoded = encodeURIComponent(text);
+                              window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`, "_blank");
+                            }}
+                            className="p-1.5 rounded bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 transition-colors"
+                            title="Send Form 7 Girvi Ticket on WhatsApp"
+                          >
+                            <MessageCircle size={14} />
+                          </button>
+
                           {l.status === "active" && (
                             <button
                               onClick={() => {
@@ -666,7 +680,22 @@ export const GirviManager: React.FC<GirviManagerProps> = ({
                       icon={<Printer size={13} />}
                       className="text-xs"
                     >
-                      Form 7 Parchi
+                      Form 7
+                    </GlassButton>
+
+                    <GlassButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const text = generateGirviWhatsAppTicket(l, shopName, accrual);
+                        const cleanPhone = l.customerPhone.replace(/[^0-9]/g, "");
+                        const encoded = encodeURIComponent(text);
+                        window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`, "_blank");
+                      }}
+                      icon={<MessageCircle size={13} className="text-[#25D366]" />}
+                      className="text-xs text-[#25D366] hover:bg-[#25D366]/10"
+                    >
+                      WhatsApp
                     </GlassButton>
 
                     {l.status === "active" && (

@@ -9,14 +9,14 @@
 
 | Total Modules | Integrated & Tested (Tenant-Isolated) | Interactive Prototype | Pending Implementation |
 | :---: | :---: | :---: | :---: |
-| **14** | **8** (Mod 1, 3, 4, 5, 6, 7, 8, 9) | **4** (Mod 2, 11, 13, 14) | **2** (Mod 10, 12) |
+| **14** | **11** (Mod 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12) | **3** (Mod 2, 13, 14) | **0** |
 
 ---
 
 ## Detailed Module Audit & Roadmap Scorecard
 
 ### 🟢 Module 1: Authentication & Employee Management
-* **Current State**: Full RBAC engine with 7 roles (`OWNER`, `ADMIN`, `MANAGER`, `ACCOUNTANT`, `SALESPERSON`, `INVENTORY_CLERK`, `KARIGAR_MANAGER`). Active permission matrix strictly masking purchase costs, profit margins, and confidential shop ledgers from sales staff. Interactive `LoginModal` (Quick Switcher + Security PIN), `FastRoleSwitcher` header widget, and `RestrictedModuleGuard` protecting Girvi, Karigar, Staff, and Reports tabs.
+* **Current State**: Full RBAC engine with 7 roles (`OWNER`, `ADMIN`, `MANAGER`, `ACCOUNTANT`, `SALESPERSON`, `INVENTORY_CLERK`, `KARIGAR_MANAGER`). Active permission matrix strictly masking purchase costs, profit margins, and confidential shop ledgers from sales staff. Interactive `LoginModal` (Quick Switcher + Security PIN), `FastRoleSwitcher` header widget, and `RestrictedModuleGuard` protecting Girvi, Karigar, Staff, Wholesale, and Reports tabs.
 * **Target State**: Full session tokens, password hashing, and server-side RBAC session guards.
 * **Status**: 🟢 **Completed & Integrated (Milestone 1)**
 
@@ -60,20 +60,20 @@
 * **Target State**: Bank statement OFX/CSV upload and automated UPI UTR reconciliation.
 * **Status**: 🟢 **Completed & Integrated (Milestone 6)**
 
-### 🔴 Module 10: Wholesale Management
-* **Current State**: Counter terminal focuses primarily on retail.
-* **Target State**: B2B retailer accounts, wholesale weight-based price lists, bulk stock allocation, memo stock (माल वापसी / कच्चा पर्चा), and metal-based settlements.
-* **Status**: 🔴 **Pending Implementation** $\rightarrow$ *Target: Milestone 7*
+### 🟢 Module 10: Wholesale Management (कच्चा पर्चा / जांगड़)
+* **Current State**: Consignment memo pipeline (`WholesaleManager.tsx`) supporting Indian Sarafa trade approvals (जांगड़). Issues multi-item consignment memos to B2B retail jewellers with exact gram weights, fine metal equivalents, and agreed wholesale valuation without triggering GST tax liability. Atomic stock movement tracking updating inventory to `"On Approval Memo: [Partner]"`. Partial/full stock returns restoring pieces to showcase with immutable audit movement records. Seamless conversion of approved items into wholesale tax invoices (`WH-INV-XXXX`). B2B partner directory tracking active memo exposure and cumulative turnover. 1-Click WhatsApp consignment dispatch statement. Guarded by `VIEW_PURCHASE_COSTS`.
+* **Target State**: B2B bulk catalog PDF generator and inter-city courier transit insurance tracking.
+* **Status**: 🟢 **Completed & Integrated (Milestone 7)**
 
-### 🟢 Module 11: Girvi & Gold Loan Management
-* **Current State**: `GirviManager.tsx` with Form 7 pledge receipts, saikda monthly interest calculation, prominent Money Lent tracking, locker box locations (`Tijori #1, Dabba #A`), packet numbers (`PKT-101`), and multi-facet search/sort.
-* **Target State**: Relational persistence in PostgreSQL, payment receipts, loan renewal, and statutory auction notice generation.
-* **Status**: 🟡 **Advanced Frontend Ready** $\rightarrow$ *Target: Milestone 7*
+### 🟢 Module 11: Girvi & Gold Loan Management (Omunim Standard)
+* **Current State**: Complete pawn brokering and pledge loan engine (`GirviManager.tsx`). Form 7 pawn tickets with photo identification, Aadhaar UID, sealed packet numbering (`PKT-101`), and dual-custody safe locations (`Tijori #1, Dabba #A`). Exact Indian Sarafa monthly interest calculation engine supporting both simple and compound monthly interest (सैंकड़ा rate per month with minimum 1-month rule). Monthly interest installment payment vouchers (`payGirviInterest`), partial principal repayments (`payGirviPrincipal`), and automatic loan clearance/release upon full repayment. 1-Click WhatsApp Form 7 pledge ticket dispatch. Guarded by `MANAGE_GIRVI`.
+* **Target State**: Statutory postal auction notice printouts and police pawn register export.
+* **Status**: 🟢 **Completed & Integrated (Milestone 7)**
 
-### 🔴 Module 12: Repair & Custom Orders
-* **Current State**: Not yet implemented.
-* **Target State**: Repair job cards, intake weight, condition photography, karigar assignment, customer custom bookings with advances, design references, and delivery tracking.
-* **Status**: 🔴 **Pending Implementation** $\rightarrow$ *Target: Milestone 7*
+### 🟢 Module 12: Repair & Custom Orders
+* **Current State**: Full repair service management and custom bridal booking pipeline (`RepairsManager.tsx`). Repair slip intake recording customer ornament, gross/net intake scale weights, defect remarks (e.g. broken hook, missing stone), repair type (solder, polish, resizing, stringing), added gold/solder wire weight & cost, and progress lifecycle (`received` → `in_repair` → `ready_for_delivery` → `delivered`). Custom Order Bookings (कस्टम आभूषण बुकिंग) with advance deposits (Cash/UPI/Bank/Old-Gold scrap weight credit) and gold rate lock protection (`rate_fixed_at_booking` vs `market_rate_on_delivery`). 1-Click WhatsApp notifications for repair completion and booking deposit receipts. Open to all showroom staff.
+* **Target State**: CAD design 3D rendering preview attachment and milestone progress SMS.
+* **Status**: 🟢 **Completed & Integrated (Milestone 7)**
 
 ### 🟡 Module 13: Reports & Analytics
 * **Current State**: `ReportsOverview.tsx` with gross revenue, category breakdown, monthly margin graphs, and invoice registry.

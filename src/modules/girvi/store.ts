@@ -1,6 +1,12 @@
-import { GirviLoan, NewGirviInput } from "./types";
+import {
+  GirviLoan,
+  NewGirviInput,
+  GirviPaymentRecord,
+  InterestAccrualResult,
+} from "./types";
 
 const GIRVI_STORAGE_KEY = "jewellery_os_girvi_v2";
+const GIRVI_PAYMENTS_KEY = "jewellery_os_girvi_payments_v1";
 
 export const INITIAL_GIRVI_LOANS: GirviLoan[] = [
   {
@@ -101,21 +107,61 @@ export const INITIAL_GIRVI_LOANS: GirviLoan[] = [
   },
 ];
 
+export const INITIAL_GIRVI_PAYMENTS: GirviPaymentRecord[] = [
+  {
+    id: "gpay-1",
+    loanId: "girvi-1",
+    loanNumber: "GL-2026-0042",
+    date: "2026-09-15T11:00:00.000Z",
+    type: "interest",
+    amount: 3300,
+    paymentMethod: "Cash",
+    receiptNumber: "GVR-101",
+    notes: "Month 1 interest settled in cash.",
+  },
+];
+
+const inMemoryCache: Record<string, string> = {};
+
+function getItem(key: string): string | null {
+  if (typeof window !== "undefined") {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+  return inMemoryCache[key] ?? null;
+}
+
+function setItem(key: string, value: string): void {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
+  } else {
+    inMemoryCache[key] = value;
+  }
+}
+
 export function getTenantGirviStorageKey(tenantId?: string): string {
   return tenantId ? `jewellery_os_tenant_${tenantId}_girvi` : GIRVI_STORAGE_KEY;
 }
 
+export function getTenantGirviPaymentsKey(tenantId?: string): string {
+  return tenantId ? `jewellery_os_tenant_${tenantId}_girvi_payments` : GIRVI_PAYMENTS_KEY;
+}
+
 export function getSavedGirviLoans(tenantId?: string): GirviLoan[] {
-  if (typeof window === "undefined") return INITIAL_GIRVI_LOANS;
   try {
     const key = getTenantGirviStorageKey(tenantId);
-    let raw = localStorage.getItem(key);
+    let raw = getItem(key);
     if (!raw && tenantId === "tenant-sandhya-jaipur") {
-      raw = localStorage.getItem(getTenantGirviStorageKey("tenant-soni-jaipur"));
+      raw = getItem(getTenantGirviStorageKey("tenant-soni-jaipur"));
     }
     if (!raw) {
-      const initial = (!tenantId || tenantId === "tenant-sandhya-jaipur" || tenantId === "tenant-soni-jaipur") ? INITIAL_GIRVI_LOANS : [];
-      localStorage.setItem(key, JSON.stringify(initial));
+      const initial = INITIAL_GIRVI_LOANS.map((l) => ({ ...l }));
+      setItem(key, JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(raw);
@@ -125,12 +171,38 @@ export function getSavedGirviLoans(tenantId?: string): GirviLoan[] {
 }
 
 export function saveGirviLoans(loans: GirviLoan[], tenantId?: string): void {
-  if (typeof window === "undefined") return;
   try {
     const key = getTenantGirviStorageKey(tenantId);
-    localStorage.setItem(key, JSON.stringify(loans));
+    setItem(key, JSON.stringify(loans));
   } catch (err) {
     console.error("Failed to save girvi loans:", err);
+  }
+}
+
+export function getSavedGirviPayments(tenantId?: string): GirviPaymentRecord[] {
+  try {
+    const key = getTenantGirviPaymentsKey(tenantId);
+    let raw = getItem(key);
+    if (!raw && tenantId === "tenant-sandhya-jaipur") {
+      raw = getItem(getTenantGirviPaymentsKey("tenant-soni-jaipur"));
+    }
+    if (!raw) {
+      const initial = INITIAL_GIRVI_PAYMENTS.map((p) => ({ ...p }));
+      setItem(key, JSON.stringify(initial));
+      return initial;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return INITIAL_GIRVI_PAYMENTS;
+  }
+}
+
+export function saveGirviPayments(payments: GirviPaymentRecord[], tenantId?: string): void {
+  try {
+    const key = getTenantGirviPaymentsKey(tenantId);
+    setItem(key, JSON.stringify(payments));
+  } catch (err) {
+    console.error("Failed to save girvi payments:", err);
   }
 }
 
@@ -180,6 +252,87 @@ export function createGirviLoan(input: NewGirviInput, tenantId?: string): GirviL
   return newLoan;
 }
 
+export function payGirviInterest(
+  loanId: string,
+  amount: number,
+  paymentMethod: "Cash" | "UPI" | "Bank",
+  notes?: string,
+  tenantId?: string
+): GirviPaymentRecord | null {
+  const loans = getSavedGirviLoans(tenantId);
+  const loan = loans.find((l) => l.id === loanId);
+  if (!loan) return null;
+
+  const paymentRecord: GirviPaymentRecord = {
+    id: `gpay-${Date.now()}`,
+    loanId: loan.id,
+    loanNumber: loan.loanNumber,
+    date: new Date().toISOString(),
+    type: "interest",
+    amount,
+    paymentMethod,
+    receiptNumber: `GVR-${Math.floor(100 + Math.random() * 900)}`,
+    notes: notes?.trim() || undefined,
+  };
+
+  const updatedLoans = loans.map((l) => {
+    if (l.id === loanId) {
+      return {
+        ...l,
+        totalInterestPaid: l.totalInterestPaid + amount,
+      };
+    }
+    return l;
+  });
+
+  saveGirviLoans(updatedLoans, tenantId);
+  const existingPayments = getSavedGirviPayments(tenantId);
+  saveGirviPayments([paymentRecord, ...existingPayments], tenantId);
+  return paymentRecord;
+}
+
+export function payGirviPrincipal(
+  loanId: string,
+  amount: number,
+  paymentMethod: "Cash" | "UPI" | "Bank",
+  notes?: string,
+  tenantId?: string
+): GirviPaymentRecord | null {
+  const loans = getSavedGirviLoans(tenantId);
+  const loan = loans.find((l) => l.id === loanId);
+  if (!loan) return null;
+
+  const paymentRecord: GirviPaymentRecord = {
+    id: `gpay-${Date.now()}`,
+    loanId: loan.id,
+    loanNumber: loan.loanNumber,
+    date: new Date().toISOString(),
+    type: "principal",
+    amount,
+    paymentMethod,
+    receiptNumber: `GPR-${Math.floor(100 + Math.random() * 900)}`,
+    notes: notes?.trim() || undefined,
+  };
+
+  const updatedLoans = loans.map((l) => {
+    if (l.id === loanId) {
+      const newPrincipalRepaid = l.principalRepaid + amount;
+      const fullyRepaid = newPrincipalRepaid >= l.principalAmount;
+      return {
+        ...l,
+        principalRepaid: newPrincipalRepaid,
+        status: fullyRepaid ? ("released" as const) : l.status,
+      };
+    }
+    return l;
+  });
+
+  saveGirviLoans(updatedLoans, tenantId);
+  const existingPayments = getSavedGirviPayments(tenantId);
+  saveGirviPayments([paymentRecord, ...existingPayments], tenantId);
+  return paymentRecord;
+}
+
 export function releaseGirviLoan(loanId: string, tenantId?: string): GirviLoan[] {
   const existing = getSavedGirviLoans(tenantId);
   const updated = existing.map((loan) =>
@@ -189,28 +342,25 @@ export function releaseGirviLoan(loanId: string, tenantId?: string): GirviLoan[]
   return updated;
 }
 
-export interface InterestAccrualResult {
-  monthsElapsed: number;
-  daysElapsed: number;
-  totalAccruedInterest: number;
-  netPayableToRelease: number;
-}
-
-export function calculateAccruedInterest(loan: GirviLoan, asOfDate: Date = new Date()): InterestAccrualResult {
+export function calculateAccruedInterest(
+  loan: GirviLoan,
+  asOfDate: Date = new Date()
+): InterestAccrualResult {
   const start = new Date(loan.startDate);
   const diffTime = Math.max(0, asOfDate.getTime() - start.getTime());
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  
-  // Traditional Indian jewellery girvi calculation: full month for fractional days > 15 days, or pro-rata
+
   const exactMonths = diffDays / 30;
   const billableMonths = Math.max(1, Math.ceil(exactMonths)); // minimum 1 month interest
 
-  const principal = loan.principalAmount - loan.principalRepaid;
+  const principal = Math.max(0, loan.principalAmount - loan.principalRepaid);
   const monthlyRatePct = loan.monthlyInterestRate;
 
   let totalInterest = 0;
   if (loan.interestType === "compound") {
-    totalInterest = Math.round(principal * (Math.pow(1 + monthlyRatePct / 100, billableMonths) - 1));
+    totalInterest = Math.round(
+      principal * (Math.pow(1 + monthlyRatePct / 100, billableMonths) - 1)
+    );
   } else {
     totalInterest = Math.round((principal * monthlyRatePct * billableMonths) / 100);
   }

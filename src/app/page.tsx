@@ -144,6 +144,39 @@ import {
   addSupplier,
 } from "../modules/suppliers/store";
 
+import { WholesaleManager } from "../components/wholesale/WholesaleManager";
+import {
+  ConsignmentMemo,
+  B2BPartnerProfile,
+  CreateConsignmentMemoInput,
+} from "../modules/wholesale/types";
+import {
+  getSavedMemos,
+  getSavedB2BPartners,
+  createConsignmentMemo,
+  returnMemoItems,
+  convertMemoToInvoice,
+  saveB2BPartners,
+} from "../modules/wholesale/store";
+
+import { RepairsManager } from "../components/repairs/RepairsManager";
+import {
+  RepairJob,
+  CustomBookingOrder,
+  CreateRepairInput,
+  UpdateRepairStatusInput,
+  CreateBookingInput,
+  BookingStatus,
+} from "../modules/repairs/types";
+import {
+  getSavedRepairs,
+  getSavedBookings,
+  createRepairJob,
+  updateRepairStatus,
+  createBookingOrder,
+  updateBookingStatus,
+} from "../modules/repairs/store";
+
 const RestrictedModuleGuard: React.FC<{
   moduleName: string;
   allowedRoles: string;
@@ -243,6 +276,14 @@ function WorkspaceMain() {
   const [purchases, setPurchases] = useState<PurchaseInvoice[]>([]);
   const [supplierPayments, setSupplierPayments] = useState<SupplierPaymentRecord[]>([]);
 
+  // Wholesale Consignment Memos & B2B Partners State
+  const [memos, setMemos] = useState<ConsignmentMemo[]>([]);
+  const [b2bPartners, setB2BPartners] = useState<B2BPartnerProfile[]>([]);
+
+  // Customer Repairs & Custom Orders State
+  const [repairs, setRepairs] = useState<RepairJob[]>([]);
+  const [bookings, setBookings] = useState<CustomBookingOrder[]>([]);
+
   // Preloaded Data for Calculator
   const [preloadedCalcData, setPreloadedCalcData] = useState<PreloadedCalcData | null>(null);
 
@@ -273,6 +314,10 @@ function WorkspaceMain() {
     setSuppliers(getSavedSuppliers(tenant.id));
     setPurchases(getSavedPurchases(tenant.id));
     setSupplierPayments(getSavedSupplierPayments(tenant.id));
+    setMemos(getSavedMemos(tenant.id));
+    setB2BPartners(getSavedB2BPartners(tenant.id));
+    setRepairs(getSavedRepairs(tenant.id));
+    setBookings(getSavedBookings(tenant.id));
     setDraftItems([]);
   };
 
@@ -689,6 +734,59 @@ function WorkspaceMain() {
     setSuppliers(result.updatedSuppliers);
   };
 
+  // Wholesale Consignment Memo Actions (जांगड़ / कच्चा पर्चा)
+  const handleIssueMemo = (input: CreateConsignmentMemoInput) => {
+    createConsignmentMemo(input, activeTenant.id);
+    setMemos(getSavedMemos(activeTenant.id));
+    setStockItems(getSavedStock(activeTenant.id));
+  };
+
+  const handleReturnMemoItems = (memoId: string, itemIds: string[]) => {
+    returnMemoItems(memoId, itemIds, activeTenant.id);
+    setMemos(getSavedMemos(activeTenant.id));
+    setStockItems(getSavedStock(activeTenant.id));
+  };
+
+  const handleConvertMemoToInvoice = (memoId: string, itemIds: string[], invoiceNum: string) => {
+    convertMemoToInvoice(memoId, itemIds, invoiceNum, activeTenant.id);
+    setMemos(getSavedMemos(activeTenant.id));
+    setStockItems(getSavedStock(activeTenant.id));
+  };
+
+  const handleAddB2BPartner = (partner: Omit<B2BPartnerProfile, "id" | "totalMemoCount" | "activeMemoValue" | "totalPurchasedValue">) => {
+    const newPartner: B2BPartnerProfile = {
+      ...partner,
+      id: `bp-${Date.now()}`,
+      totalMemoCount: 0,
+      activeMemoValue: 0,
+      totalPurchasedValue: 0,
+    };
+    const updated = [newPartner, ...b2bPartners];
+    saveB2BPartners(updated, activeTenant.id);
+    setB2BPartners(updated);
+  };
+
+  // Customer Repairs & Custom Orders Actions
+  const handleCreateRepair = (input: CreateRepairInput) => {
+    createRepairJob(input, activeTenant.id);
+    setRepairs(getSavedRepairs(activeTenant.id));
+  };
+
+  const handleUpdateRepairStatus = (input: UpdateRepairStatusInput) => {
+    updateRepairStatus(input, activeTenant.id);
+    setRepairs(getSavedRepairs(activeTenant.id));
+  };
+
+  const handleCreateBooking = (input: CreateBookingInput) => {
+    createBookingOrder(input, activeTenant.id);
+    setBookings(getSavedBookings(activeTenant.id));
+  };
+
+  const handleUpdateBookingStatus = (bookingId: string, status: BookingStatus) => {
+    updateBookingStatus(bookingId, status, activeTenant.id);
+    setBookings(getSavedBookings(activeTenant.id));
+  };
+
   const handleStartBillForCustomer = (cust: Customer) => {
     setSelectedBillingCustomer({
       id: cust.id,
@@ -783,13 +881,16 @@ function WorkspaceMain() {
           <div className="lg:hidden p-4 border-b border-white/[0.05] bg-[var(--surface-primary)] flex flex-col gap-1 z-40">
             {[
               { name: "Counter Calculator", href: "/calculator" },
+              { name: "Dashboard", href: "/" },
               { name: "Billing & Invoices", href: "/invoices" },
               { name: "Girvi / Gold Loans", href: "/girvi" },
               { name: "Karigar Ledger", href: "/karigar" },
               { name: "Staff & Payroll", href: "/staff" },
-              { name: "Accounts & Cashbook", href: "/accounts" },
-              { name: "Dashboard", href: "/" },
               { name: "Inventory", href: "/inventory" },
+              { name: "Purchases & Suppliers", href: "/purchases" },
+              { name: "Wholesale & Memos", href: "/wholesale" },
+              { name: "Repairs & Bookings", href: "/repairs" },
+              { name: "Accounts & Cashbook", href: "/accounts" },
               { name: "Customers", href: "/customers" },
               { name: "Reports & Analytics", href: "/reports" },
               { name: "Shop Settings", href: "/settings" },
@@ -965,6 +1066,41 @@ function WorkspaceMain() {
                 allowedRoles="Owner, Admin, Manager, Accountant"
               />
             )
+          )}
+
+          {/* View: Wholesale & Consignment Memos (कच्चा पर्चा / जांगड़) */}
+          {activeTab === "/wholesale" && (
+            hasPermission("VIEW_PURCHASE_COSTS") ? (
+              <WholesaleManager
+                memos={memos}
+                partners={b2bPartners}
+                onIssueMemo={handleIssueMemo}
+                onReturnMemoItems={handleReturnMemoItems}
+                onConvertMemoToInvoice={handleConvertMemoToInvoice}
+                onAddPartner={handleAddB2BPartner}
+                shopName={activeTenant.businessName}
+                tenantId={activeTenant.id}
+              />
+            ) : (
+              <RestrictedModuleGuard
+                moduleName="Wholesale & Consignment Memos (कच्चा पर्चा / जांगड़)"
+                allowedRoles="Owner, Admin, Manager, Accountant"
+              />
+            )
+          )}
+
+          {/* View: Repairs & Custom Customer Bookings */}
+          {activeTab === "/repairs" && (
+            <RepairsManager
+              repairs={repairs}
+              bookings={bookings}
+              onCreateRepair={handleCreateRepair}
+              onUpdateRepairStatus={handleUpdateRepairStatus}
+              onCreateBooking={handleCreateBooking}
+              onUpdateBookingStatus={handleUpdateBookingStatus}
+              shopName={activeTenant.businessName}
+              tenantId={activeTenant.id}
+            />
           )}
 
           {/* View: Customers & Ledger */}
