@@ -8,6 +8,9 @@ import {
   CreateJobCardInput,
   JobCardStatus,
 } from "./types";
+import { StockItem, JewelleryCategory } from "../inventory/types";
+import { getSavedStock, saveStockItems, recordStockMovement } from "../inventory/store";
+import { postKarigarLabourPaymentToAccounts } from "../accounts/store";
 
 const KARIGARS_STORAGE_KEY = "jewellery_os_karigars_v2";
 const KARIGAR_TXNS_STORAGE_KEY = "jewellery_os_karigar_txns_v2";
@@ -429,6 +432,25 @@ export function issueMetalToKarigar(input: IssueMetalInput, tenantId?: string): 
   saveKarigars(updatedKarigars, tenantId);
   const txns = [txn, ...getSavedKarigarTxns(tenantId)];
   saveKarigarTxns(txns, tenantId);
+
+  // Record central stock movement tracking bullion issued from safe to workshop
+  recordStockMovement(
+    {
+      stockItemId: `bullion-issue-${Date.now()}`,
+      sku: `BULLION-${input.metal.toUpperCase()}-24K`,
+      productName: `${input.purity} (${input.grossWeight}g)`,
+      fromStatus: "in_vault",
+      toStatus: "in_vault",
+      fromLocation: "Fine Bullion Stock Safe",
+      toLocation: `Karigar Workshop (${name})`,
+      reason: `Issued for ${input.ornamentOrderName}`,
+      performedById: "system-karigar",
+      performedByName: "Artisan Allocation Desk",
+      performedByRole: "OWNER",
+    },
+    tenantId
+  );
+
   return txn;
 }
 
@@ -488,6 +510,58 @@ export function receiveOrnamentFromKarigar(
     updateJobCardStatus(input.jobCardId, "completed", input.huid, tenantId);
   }
 
+  // Inward finished handcrafted ornament into central inventory showcase
+  const currentStock = getSavedStock(tenantId);
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const purityKey = input.purity.includes("18K") ? "18K" : input.purity.includes("24K") ? "24K" : "22K";
+  const sku = `KRG-${purityKey}-${randomSuffix}`;
+  const barcode = `89088${Math.floor(10000 + Math.random() * 90000)}`;
+
+  const finishedItem: StockItem = {
+    id: `stock-karigar-${Date.now()}`,
+    sku,
+    barcode,
+    name: input.ornamentName,
+    category: "Other" as JewelleryCategory,
+    metal: input.metal,
+    purity: purityKey,
+    purityDisplay: input.purity,
+    grossWeight: input.grossWeight,
+    stoneWeight: Math.round((input.grossWeight - input.netWeight) * 1000) / 1000,
+    otherDeductions: 0,
+    netWeight: input.netWeight,
+    fineWeight: Number((input.netWeight * (purityKey === "22K" ? 22 / 24 : purityKey === "18K" ? 18 / 24 : 1)).toFixed(3)),
+    hsnCode: "7113",
+    acquisitionCost: Math.round(input.netWeight * 13500 + input.labourCharges),
+    defaultMakingType: "percentage",
+    defaultMakingValue: 18,
+    trayLocation: "Showcase Shelf #1 (Karigar Inwarded)",
+    supplierName: name,
+    status: "in_showcase",
+    dateAdded: new Date().toISOString().split("T")[0],
+    huid: input.huid,
+    notes: `Received from artisan ${name}. Labour: ₹${input.labourCharges}`,
+  };
+
+  saveStockItems([finishedItem, ...currentStock], tenantId);
+
+  recordStockMovement(
+    {
+      stockItemId: finishedItem.id,
+      sku: finishedItem.sku,
+      productName: finishedItem.name,
+      fromStatus: "in_vault",
+      toStatus: "in_showcase",
+      fromLocation: `Karigar Workshop (${name})`,
+      toLocation: finishedItem.trayLocation,
+      reason: `Finished ornament inwarded from Karigar ${name}`,
+      performedById: "system-karigar",
+      performedByName: "Artisan Receiving Desk",
+      performedByRole: "OWNER",
+    },
+    tenantId
+  );
+
   return txn;
 }
 
@@ -521,5 +595,16 @@ export function payLabourToKarigar(input: PayLabourInput, tenantId?: string): Ka
   saveKarigars(updatedKarigars, tenantId);
   const txns = [txn, ...getSavedKarigarTxns(tenantId)];
   saveKarigarTxns(txns, tenantId);
+
+  // Converge with Double-Entry Accounts Ledger (Debit Karigar Due 2020, Credit Cash/Bank 1010/1020)
+  postKarigarLabourPaymentToAccounts(
+    {
+      amount: input.amount,
+      paymentMethod: input.paymentMethod,
+      karigarName: name,
+    },
+    tenantId
+  );
+
   return txn;
 }

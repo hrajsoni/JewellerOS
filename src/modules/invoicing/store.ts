@@ -182,22 +182,45 @@ const SEED_INVOICES: FinalizedInvoice[] = [
   },
 ];
 
+const inMemoryInvoicesCache: Record<string, string> = {};
+
+function getInvoicesStorageItem(key: string): string | null {
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return inMemoryInvoicesCache[key] ?? null;
+    }
+  }
+  return inMemoryInvoicesCache[key] ?? null;
+}
+
+function setInvoicesStorageItem(key: string, value: string): void {
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // ignore
+    }
+  }
+  inMemoryInvoicesCache[key] = value;
+}
+
 export function getTenantInvoiceStorageKey(tenantId?: string): string {
   return tenantId ? `jewellery_os_tenant_${tenantId}_invoices` : STORAGE_KEY;
 }
 
 export function getSavedInvoices(tenantId?: string): FinalizedInvoice[] {
-  if (typeof window === "undefined") return SEED_INVOICES;
   try {
     const key = getTenantInvoiceStorageKey(tenantId);
-    let raw = localStorage.getItem(key);
+    let raw = getInvoicesStorageItem(key);
     if (!raw && tenantId === "tenant-sandhya-jaipur") {
-      raw = localStorage.getItem(getTenantInvoiceStorageKey("tenant-soni-jaipur"));
+      raw = getInvoicesStorageItem(getTenantInvoiceStorageKey("tenant-soni-jaipur"));
     }
     if (!raw) {
       // Default tenant gets seed invoices; new tenants start with clean ledger
       const initial = (!tenantId || tenantId === "tenant-sandhya-jaipur" || tenantId === "tenant-soni-jaipur") ? SEED_INVOICES : [];
-      localStorage.setItem(key, JSON.stringify(initial));
+      setInvoicesStorageItem(key, JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(raw);
@@ -207,24 +230,23 @@ export function getSavedInvoices(tenantId?: string): FinalizedInvoice[] {
 }
 
 export function saveNewInvoice(invoice: FinalizedInvoice, tenantId?: string): void {
-  if (typeof window === "undefined") return;
   try {
     const key = getTenantInvoiceStorageKey(tenantId);
     const list = getSavedInvoices(tenantId);
     const updated = [invoice, ...list];
-    localStorage.setItem(key, JSON.stringify(updated));
+    setInvoicesStorageItem(key, JSON.stringify(updated));
   } catch (err) {
     console.error("Failed to save invoice to storage:", err);
   }
 }
 
 export function saveInvoicesDirect(invoices: FinalizedInvoice[], tenantId?: string): void {
-  if (typeof window === "undefined") return;
   try {
     const key = getTenantInvoiceStorageKey(tenantId);
-    localStorage.setItem(key, JSON.stringify(invoices));
+    setInvoicesStorageItem(key, JSON.stringify(invoices));
   } catch (err) {
     console.error("Failed to save invoices directly to storage:", err);
   }
 }
+
 

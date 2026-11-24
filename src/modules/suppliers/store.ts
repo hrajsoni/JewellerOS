@@ -14,6 +14,10 @@ import {
   generateSkuForCategory,
   generateBarcodeForIndex,
 } from "../inventory/store";
+import {
+  postPurchaseToAccounts,
+  postSupplierPaymentToAccounts,
+} from "../accounts/store";
 
 const SUPPLIERS_STORAGE_KEY = "jewellery_os_suppliers_v1";
 const PURCHASES_STORAGE_KEY = "jewellery_os_purchases_v1";
@@ -90,17 +94,40 @@ export const INITIAL_SUPPLIER_PROFILES: SupplierProfile[] = [
   },
 ];
 
+const inMemorySuppliersCache: Record<string, string> = {};
+
+function getSuppliersStorageItem(key: string): string | null {
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return inMemorySuppliersCache[key] ?? null;
+    }
+  }
+  return inMemorySuppliersCache[key] ?? null;
+}
+
+function setSuppliersStorageItem(key: string, value: string): void {
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // ignore
+    }
+  }
+  inMemorySuppliersCache[key] = value;
+}
+
 function getTenantKey(base: string, tenantId?: string): string {
   return tenantId ? `jewellery_os_tenant_${tenantId}_${base}` : base;
 }
 
 export function getSavedSuppliers(tenantId?: string): SupplierProfile[] {
-  if (typeof window === "undefined") return INITIAL_SUPPLIER_PROFILES;
   try {
     const key = getTenantKey(SUPPLIERS_STORAGE_KEY, tenantId);
-    const raw = localStorage.getItem(key);
+    const raw = getSuppliersStorageItem(key);
     if (!raw) {
-      localStorage.setItem(key, JSON.stringify(INITIAL_SUPPLIER_PROFILES));
+      setSuppliersStorageItem(key, JSON.stringify(INITIAL_SUPPLIER_PROFILES));
       return INITIAL_SUPPLIER_PROFILES;
     }
     const parsed = JSON.parse(raw);
@@ -111,9 +138,9 @@ export function getSavedSuppliers(tenantId?: string): SupplierProfile[] {
 }
 
 export function saveSuppliers(suppliers: SupplierProfile[], tenantId?: string): void {
-  if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(getTenantKey(SUPPLIERS_STORAGE_KEY, tenantId), JSON.stringify(suppliers));
+    const key = getTenantKey(SUPPLIERS_STORAGE_KEY, tenantId);
+    setSuppliersStorageItem(key, JSON.stringify(suppliers));
   } catch (err) {
     console.error("Failed to save suppliers to storage:", err);
   }
@@ -145,10 +172,9 @@ export function addSupplier(input: NewSupplierInput, tenantId?: string): Supplie
 }
 
 export function getSavedPurchases(tenantId?: string): PurchaseInvoice[] {
-  if (typeof window === "undefined") return [];
   try {
     const key = getTenantKey(PURCHASES_STORAGE_KEY, tenantId);
-    const raw = localStorage.getItem(key);
+    const raw = getSuppliersStorageItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -158,19 +184,18 @@ export function getSavedPurchases(tenantId?: string): PurchaseInvoice[] {
 }
 
 export function savePurchases(purchases: PurchaseInvoice[], tenantId?: string): void {
-  if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(getTenantKey(PURCHASES_STORAGE_KEY, tenantId), JSON.stringify(purchases));
+    const key = getTenantKey(PURCHASES_STORAGE_KEY, tenantId);
+    setSuppliersStorageItem(key, JSON.stringify(purchases));
   } catch (err) {
     console.error("Failed to save purchase invoices to storage:", err);
   }
 }
 
 export function getSavedSupplierPayments(tenantId?: string): SupplierPaymentRecord[] {
-  if (typeof window === "undefined") return [];
   try {
     const key = getTenantKey(SUPPLIER_PAYMENTS_KEY, tenantId);
-    const raw = localStorage.getItem(key);
+    const raw = getSuppliersStorageItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -180,9 +205,9 @@ export function getSavedSupplierPayments(tenantId?: string): SupplierPaymentReco
 }
 
 export function saveSupplierPayments(payments: SupplierPaymentRecord[], tenantId?: string): void {
-  if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(getTenantKey(SUPPLIER_PAYMENTS_KEY, tenantId), JSON.stringify(payments));
+    const key = getTenantKey(SUPPLIER_PAYMENTS_KEY, tenantId);
+    setSuppliersStorageItem(key, JSON.stringify(payments));
   } catch (err) {
     console.error("Failed to save supplier payments to storage:", err);
   }
@@ -301,6 +326,18 @@ export function recordPurchaseInvoice(
 
   saveSuppliers(updatedSuppliers, tenantId);
 
+  // 4. Converge with Double-Entry Accounts Ledger
+  postPurchaseToAccounts(
+    {
+      invoiceTotal: fullInvoice.grandTotal,
+      paidAmount: fullInvoice.amountPaid,
+      paymentMethod: fullInvoice.paymentMethod,
+      invoiceNumber: fullInvoice.invoiceNumber,
+      supplierName: fullInvoice.supplierName,
+    },
+    tenantId
+  );
+
   return {
     invoice: fullInvoice,
     updatedStock,
@@ -327,8 +364,10 @@ export function recordSupplierPayment(
 
   // 2. Reduce supplier balance
   const suppliers = getSavedSuppliers(tenantId);
+  let supplierName = "Wholesale Supplier";
   const updatedSuppliers = suppliers.map((sup) => {
     if (sup.id === payment.supplierId) {
+      supplierName = sup.name;
       return {
         ...sup,
         outstandingBalanceINR: Math.max(0, sup.outstandingBalanceINR - payment.amount),
@@ -338,6 +377,17 @@ export function recordSupplierPayment(
   });
 
   saveSuppliers(updatedSuppliers, tenantId);
+
+  // 3. Converge with Double-Entry Accounts Ledger
+  postSupplierPaymentToAccounts(
+    {
+      amount: newPayment.amount,
+      paymentMethod: newPayment.method,
+      supplierName,
+      receiptNumber: newPayment.referenceNo,
+    },
+    tenantId
+  );
 
   return {
     paymentRecord: newPayment,

@@ -4,6 +4,11 @@ import {
   GirviPaymentRecord,
   InterestAccrualResult,
 } from "./types";
+import {
+  postGirviLoanDisbursementToAccounts,
+  postGirviInterestReceiptToAccounts,
+  postGirviPrincipalRepaymentToAccounts,
+} from "../accounts/store";
 
 const GIRVI_STORAGE_KEY = "jewellery_os_girvi_v2";
 const GIRVI_PAYMENTS_KEY = "jewellery_os_girvi_payments_v1";
@@ -249,6 +254,17 @@ export function createGirviLoan(input: NewGirviInput, tenantId?: string): GirviL
   const existing = getSavedGirviLoans(tenantId);
   const updated = [newLoan, ...existing];
   saveGirviLoans(updated, tenantId);
+
+  // Converge with Double-Entry Accounts (Debit Girvi Asset 1060, Credit Cash Drawer 1010)
+  postGirviLoanDisbursementToAccounts(
+    {
+      principalAmount: newLoan.principalAmount,
+      loanNumber: newLoan.loanNumber,
+      customerName: newLoan.customerName,
+    },
+    tenantId
+  );
+
   return newLoan;
 }
 
@@ -288,6 +304,18 @@ export function payGirviInterest(
   saveGirviLoans(updatedLoans, tenantId);
   const existingPayments = getSavedGirviPayments(tenantId);
   saveGirviPayments([paymentRecord, ...existingPayments], tenantId);
+
+  // Converge with Double-Entry Accounts (Debit Cash/Bank 1010/1020/1030, Credit Interest Income 3030)
+  postGirviInterestReceiptToAccounts(
+    {
+      amount,
+      paymentMethod,
+      loanNumber: loan.loanNumber,
+      customerName: loan.customerName,
+    },
+    tenantId
+  );
+
   return paymentRecord;
 }
 
@@ -330,6 +358,18 @@ export function payGirviPrincipal(
   saveGirviLoans(updatedLoans, tenantId);
   const existingPayments = getSavedGirviPayments(tenantId);
   saveGirviPayments([paymentRecord, ...existingPayments], tenantId);
+
+  // Converge with Double-Entry Accounts (Debit Cash/Bank 1010/1020/1030, Credit Girvi Asset 1060)
+  postGirviPrincipalRepaymentToAccounts(
+    {
+      amount,
+      paymentMethod,
+      loanNumber: loan.loanNumber,
+      customerName: loan.customerName,
+    },
+    tenantId
+  );
+
   return paymentRecord;
 }
 

@@ -6,6 +6,9 @@ import {
   MemoStatus,
 } from "./types";
 import { getSavedStock, saveStockItems, recordStockMovement } from "../inventory/store";
+import { InvoiceLineItem, FinalizedInvoice } from "../invoicing/types";
+import { saveNewInvoice } from "../invoicing/store";
+import { postInvoiceToAccounts } from "../accounts/store";
 
 const MEMOS_STORAGE_KEY = "jewellery_os_memos_v1";
 const PARTNERS_STORAGE_KEY = "jewellery_os_b2b_partners_v1";
@@ -444,6 +447,85 @@ export function convertMemoToInvoice(
     if (stockChanged) {
       saveStockItems(updatedStock, tenantId);
     }
+
+    // Converge with Sales Invoices & Double-Entry Accounting
+    const soldMemoItems = memo.items.filter((i) => soldItemIds.includes(i.id));
+    const lineItems: InvoiceLineItem[] = soldMemoItems.map((mi) => ({
+      id: `line-${mi.id}`,
+      stockItemId: mi.stockItemId,
+      sku: mi.sku,
+      barcode: mi.barcode,
+      name: mi.name,
+      metal: mi.metal,
+      purity: mi.purity.includes("18K") ? "18K" : "22K",
+      purityDisplay: mi.purity,
+      grossWeight: mi.grossWeight,
+      stoneWeight: 0,
+      netWeight: mi.netWeight,
+      metalRate: mi.wholesaleRate,
+      effectiveRatePerGram: Math.round(mi.wholesaleRate / 10),
+      metalValue: mi.totalValue,
+      makingType: "fixed",
+      makingRate: 0,
+      makingCharges: 0,
+      stoneValue: 0,
+      discount: 0,
+      totalBeforeTax: mi.totalValue,
+      fineWeight: mi.fineWeight,
+      fineGoldValue24k: mi.totalValue,
+      wastagePercentage: 0,
+    }));
+
+    const itemsSubtotal = lineItems.reduce((sum, item) => sum + item.totalBeforeTax, 0);
+    const gstPercentage = memo.jewellerGstin ? 3 : 0;
+    const totalGst = Math.round(itemsSubtotal * (gstPercentage / 100));
+    const cgstAmount = Math.round(totalGst / 2);
+    const sgstAmount = totalGst - cgstAmount;
+    const grandTotal = itemsSubtotal + totalGst;
+
+    const finalizedInvoice: FinalizedInvoice = {
+      id: `inv-wh-${Date.now()}`,
+      invoiceNumber,
+      invoiceDate: new Date().toISOString().split("T")[0],
+      createdAt: nowStr,
+      customer: {
+        id: `b2b-${memo.jewellerPartnerName.toLowerCase().replace(/\s+/g, "-")}`,
+        name: memo.jewellerPartnerName,
+        phone: memo.jewellerPhone,
+        city: memo.jewellerCity,
+        gstin: memo.jewellerGstin || "URP (Wholesale B2B Partner)",
+      },
+      items: lineItems,
+      itemsSubtotal,
+      oldGoldTotalCredit: 0,
+      discountTotal: 0,
+      taxableAmount: itemsSubtotal,
+      gstPercentage,
+      cgstAmount,
+      sgstAmount,
+      totalGst,
+      roundoff: 0,
+      grandTotal,
+      payments: [
+        {
+          method: "Customer Credit",
+          amount: grandTotal,
+          transactionRef: `Wholesale Memo ${memo.memoNumber}`,
+        },
+      ],
+      totalPaid: grandTotal,
+      balanceDue: 0,
+      status: "paid",
+      shopSnapshot: {
+        name: "Sandhya Jewellers",
+        address: "142 Sarafa Bazar, M.I. Road, Jaipur, RJ 302001",
+        phone: "+91 94140 12345",
+        gstin: "08AAAAJ1234F1Z8",
+      },
+    };
+
+    saveNewInvoice(finalizedInvoice, tenantId);
+    postInvoiceToAccounts(finalizedInvoice, tenantId);
   }
 
   return updatedMemo;

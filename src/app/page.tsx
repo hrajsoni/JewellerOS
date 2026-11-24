@@ -110,6 +110,7 @@ import {
   getSavedDailyClosings,
   recordExpense,
   recordDailyCashClosing,
+  postInvoiceToAccounts,
 } from "../modules/accounts/store";
 
 import { StaffManager } from "../components/staff/StaffManager";
@@ -426,6 +427,8 @@ function WorkspaceMain() {
     setStockItems(finalStock);
 
     saveNewInvoice(finalized, activeTenant.id);
+    postInvoiceToAccounts(finalized, activeTenant.id);
+    setAccounts(getSavedAccounts(activeTenant.id));
     setInvoices([finalized, ...invoices]);
     setCurrentInvoiceData(finalized);
     setIsInvoiceModalOpen(true);
@@ -500,6 +503,8 @@ function WorkspaceMain() {
     setStockItems(lockedStock);
 
     saveNewInvoice(newInvoice, activeTenant.id);
+    postInvoiceToAccounts(newInvoice, activeTenant.id);
+    setAccounts(getSavedAccounts(activeTenant.id));
     setInvoices([newInvoice, ...invoices]);
     setCurrentInvoiceData(newInvoice);
     setIsInvoiceModalOpen(true);
@@ -586,6 +591,8 @@ function WorkspaceMain() {
     setStockItems(finalStock);
 
     saveNewInvoice(newInvoice, activeTenant.id);
+    postInvoiceToAccounts(newInvoice, activeTenant.id);
+    setAccounts(getSavedAccounts(activeTenant.id));
     setInvoices([newInvoice, ...invoices]);
     setCurrentInvoiceData(newInvoice);
     setIsInvoiceModalOpen(true);
@@ -626,11 +633,13 @@ function WorkspaceMain() {
   const handleAddGirviLoan = (input: NewGirviInput) => {
     createGirviLoan(input, activeTenant.id);
     setGirviLoans(getSavedGirviLoans(activeTenant.id));
+    setAccounts(getSavedAccounts(activeTenant.id));
   };
 
   const handleReleaseGirviLoan = (loanId: string) => {
     const updated = releaseGirviLoan(loanId, activeTenant.id);
     setGirviLoans(updated);
+    setAccounts(getSavedAccounts(activeTenant.id));
   };
 
   // Karigar Actions
@@ -649,18 +658,21 @@ function WorkspaceMain() {
     issueMetalToKarigar(input, activeTenant.id);
     setKarigars(getSavedKarigars(activeTenant.id));
     setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
+    setStockItems(getSavedStock(activeTenant.id));
   };
 
   const handleReceiveOrnamentFromKarigar = (input: ReceiveOrnamentInput) => {
     receiveOrnamentFromKarigar(input, activeTenant.id);
     setKarigars(getSavedKarigars(activeTenant.id));
     setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
+    setStockItems(getSavedStock(activeTenant.id));
   };
 
   const handlePayLabourToKarigar = (input: PayLabourInput) => {
     payLabourToKarigar(input, activeTenant.id);
     setKarigars(getSavedKarigars(activeTenant.id));
     setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
+    setAccounts(getSavedAccounts(activeTenant.id));
   };
 
   const handleCreateJobCard = (input: CreateJobCardInput) => {
@@ -668,6 +680,7 @@ function WorkspaceMain() {
     setJobCards(getSavedJobCards(activeTenant.id));
     setKarigars(getSavedKarigars(activeTenant.id));
     setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
+    setStockItems(getSavedStock(activeTenant.id));
   };
 
   const handleUpdateJobCardStatus = (jobCardId: string, status: JobCardStatus, huid?: string) => {
@@ -712,6 +725,7 @@ function WorkspaceMain() {
     setPurchases([result.invoice, ...purchases]);
     setStockItems(result.updatedStock);
     setSuppliers(result.updatedSuppliers);
+    setAccounts(getSavedAccounts(activeTenant.id));
   };
 
   const handleAddSupplier = (input: NewSupplierInput) => {
@@ -723,6 +737,7 @@ function WorkspaceMain() {
     const result = recordSupplierPayment(payment, activeTenant.id);
     setSupplierPayments([result.paymentRecord, ...supplierPayments]);
     setSuppliers(result.updatedSuppliers);
+    setAccounts(getSavedAccounts(activeTenant.id));
   };
 
   // Wholesale Consignment Memo Actions (जांगड़ / कच्चा पर्चा)
@@ -742,6 +757,8 @@ function WorkspaceMain() {
     convertMemoToInvoice(memoId, itemIds, invoiceNum, activeTenant.id);
     setMemos(getSavedMemos(activeTenant.id));
     setStockItems(getSavedStock(activeTenant.id));
+    setInvoices(getSavedInvoices(activeTenant.id));
+    setAccounts(getSavedAccounts(activeTenant.id));
   };
 
   const handleAddB2BPartner = (partner: Omit<B2BPartnerProfile, "id" | "totalMemoCount" | "activeMemoValue" | "totalPurchasedValue">) => {

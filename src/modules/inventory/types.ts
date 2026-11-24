@@ -53,6 +53,7 @@ export interface StockItem {
   supplierName?: string;
   status: StockStatus;
   dateAdded: string;
+  huid?: string; // 6-digit alphanumeric BIS Hallmark Unique Identification code
   notes?: string;
 }
 

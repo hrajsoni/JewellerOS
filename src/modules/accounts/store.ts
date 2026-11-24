@@ -7,10 +7,12 @@ import {
   CashDenominationBreakdown,
   CashClosingStatus,
 } from "./types";
+import { FinalizedInvoice } from "../invoicing/types";
 
 const ACCOUNTS_STORAGE_KEY = "jewellery_os_accounts_v1";
 const EXPENSES_STORAGE_KEY = "jewellery_os_expenses_v1";
 const CLOSINGS_STORAGE_KEY = "jewellery_os_daily_closings_v1";
+const JOURNAL_STORAGE_KEY = "jewellery_os_journal_entries_v1";
 
 export const INITIAL_ACCOUNTS: Account[] = [
   {
@@ -62,6 +64,16 @@ export const INITIAL_ACCOUNTS: Account[] = [
     balance: 95000,
     isSystem: true,
     notes: "Total ledger debt owed by credit customers.",
+  },
+  {
+    id: "acc-1060",
+    code: "1060",
+    name: "Girvi Loan Book (Pawn Principal Receivables)",
+    nameHindi: "गिरवी ऋण बही (Girvi Principal)",
+    type: "asset",
+    balance: 375000,
+    isSystem: true,
+    notes: "Total active principal disbursed to customers against pledged gold/silver ornaments.",
   },
   {
     id: "acc-2010",
@@ -122,6 +134,16 @@ export const INITIAL_ACCOUNTS: Account[] = [
     balance: 168400,
     isSystem: true,
     notes: "Gross making charges collected from retail customers.",
+  },
+  {
+    id: "acc-3030",
+    code: "3030",
+    name: "Girvi Loan Interest Income",
+    nameHindi: "गिरवी ब्याज आय",
+    type: "revenue",
+    balance: 48900,
+    isSystem: true,
+    notes: "Monthly interest earned on pawn brokering / gold loans.",
   },
   {
     id: "acc-4010",
@@ -274,6 +296,10 @@ export function getTenantExpensesKey(tenantId?: string): string {
 
 export function getTenantClosingsKey(tenantId?: string): string {
   return tenantId ? `jewellery_os_tenant_${tenantId}_daily_closings` : CLOSINGS_STORAGE_KEY;
+}
+
+export function getTenantJournalKey(tenantId?: string): string {
+  return tenantId ? `jewellery_os_tenant_${tenantId}_journal_entries` : JOURNAL_STORAGE_KEY;
 }
 
 export function getSavedAccounts(tenantId?: string): Account[] {
@@ -462,4 +488,451 @@ export function recordDailyCashClosing(
   saveAccounts(updatedAccounts, tenantId);
 
   return closing;
+}
+
+export interface JournalEntryLine {
+  accountCode: string;
+  accountName?: string;
+  debit?: number;
+  credit?: number;
+  description?: string;
+}
+
+export interface JournalEntry {
+  id: string;
+  timestamp: string;
+  referenceType:
+    | "POS_SALE"
+    | "PURCHASE"
+    | "SUPPLIER_PAYMENT"
+    | "KARIGAR_LABOUR"
+    | "GIRVI_DISBURSEMENT"
+    | "GIRVI_INTEREST"
+    | "GIRVI_REPAYMENT"
+    | "EXPENSE"
+    | "MANUAL";
+  referenceId: string;
+  narration: string;
+  lines: JournalEntryLine[];
+  totalDebit: number;
+  totalCredit: number;
+  performedBy?: string;
+}
+
+export function getSavedJournalEntries(tenantId?: string): JournalEntry[] {
+  try {
+    const key = getTenantJournalKey(tenantId);
+    const raw = getItem(key);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function saveJournalEntries(entries: JournalEntry[], tenantId?: string): void {
+  try {
+    const key = getTenantJournalKey(tenantId);
+    setItem(key, JSON.stringify(entries));
+  } catch (err) {
+    console.error("Failed to save journal entries:", err);
+  }
+}
+
+export function recordJournalPosting(
+  entry: {
+    referenceType: JournalEntry["referenceType"];
+    referenceId: string;
+    narration: string;
+    lines: JournalEntryLine[];
+    performedBy?: string;
+  },
+  tenantId?: string
+): { success: boolean; entry: JournalEntry } {
+  const accounts = getSavedAccounts(tenantId);
+  const totalDebit = entry.lines.reduce((sum, l) => sum + (l.debit || 0), 0);
+  const totalCredit = entry.lines.reduce((sum, l) => sum + (l.credit || 0), 0);
+
+  const enrichedLines = entry.lines.map((l) => {
+    const acc = accounts.find((a) => a.code === l.accountCode);
+    return {
+      ...l,
+      accountName: acc?.name || l.accountName || `Account ${l.accountCode}`,
+      debit: l.debit ? Math.round(l.debit * 100) / 100 : undefined,
+      credit: l.credit ? Math.round(l.credit * 100) / 100 : undefined,
+    };
+  });
+
+  const journalRecord: JournalEntry = {
+    id: `jnl-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+    timestamp: new Date().toISOString(),
+    referenceType: entry.referenceType,
+    referenceId: entry.referenceId,
+    narration: entry.narration,
+    lines: enrichedLines,
+    totalDebit: Math.round(totalDebit * 100) / 100,
+    totalCredit: Math.round(totalCredit * 100) / 100,
+    performedBy: entry.performedBy || "System Operator",
+  };
+
+  // Mutate account balances according to standard double-entry rules
+  // Assets & Expenses: Debit (+) increases, Credit (-) decreases
+  // Liabilities, Revenues & Equity: Credit (+) increases, Debit (-) decreases
+  const updatedAccounts = accounts.map((acc) => {
+    const linesForAcc = enrichedLines.filter((l) => l.accountCode === acc.code);
+    if (linesForAcc.length === 0) return acc;
+
+    let newBalance = acc.balance;
+    for (const line of linesForAcc) {
+      const debit = line.debit || 0;
+      const credit = line.credit || 0;
+
+      if (acc.type === "asset" || acc.type === "expense") {
+        newBalance = newBalance + debit - credit;
+      } else {
+        newBalance = newBalance + credit - debit;
+      }
+    }
+
+    return {
+      ...acc,
+      balance: Math.round(newBalance * 100) / 100,
+    };
+  });
+
+  saveAccounts(updatedAccounts, tenantId);
+  const existingEntries = getSavedJournalEntries(tenantId);
+  saveJournalEntries([journalRecord, ...existingEntries], tenantId);
+
+  return { success: true, entry: journalRecord };
+}
+
+export function postInvoiceToAccounts(
+  invoice: FinalizedInvoice,
+  tenantId?: string
+): { success: boolean; entry?: JournalEntry } {
+  const lines: JournalEntryLine[] = [];
+
+  // 1. Debits from Payments
+  for (const pay of invoice.payments) {
+    if (pay.amount <= 0) continue;
+    let code = "1010"; // Default Cash
+    if (pay.method === "UPI") code = "1030";
+    else if (pay.method === "Card" || pay.method === "Bank Transfer") code = "1020";
+    else if (pay.method === "Old Gold") code = "1040"; // Inwarded scrap bullion
+    else if (pay.method === "Customer Credit") code = "1050"; // Accounts receivable
+
+    lines.push({
+      accountCode: code,
+      debit: pay.amount,
+      description: `Payment received via ${pay.method}`,
+    });
+  }
+
+  // 2. Debit Customer Receivables for any remaining balance due
+  if (invoice.balanceDue > 0) {
+    lines.push({
+      accountCode: "1050",
+      debit: invoice.balanceDue,
+      description: `Unpaid customer balance on Invoice #${invoice.invoiceNumber}`,
+    });
+  }
+
+  // 3. Credits
+  const makingChargesTotal = invoice.items.reduce((s, i) => s + (i.makingCharges || 0), 0);
+  const taxableTotal = invoice.taxableAmount;
+  const metalGemRevenue = Math.max(0, taxableTotal - makingChargesTotal);
+  const gstTotal = invoice.totalGst || (invoice.cgstAmount || 0) + (invoice.sgstAmount || 0) || 0;
+
+  if (makingChargesTotal > 0) {
+    lines.push({
+      accountCode: "3020",
+      credit: makingChargesTotal,
+      description: "Craftsmanship & Making Charges Income",
+    });
+  }
+
+  if (metalGemRevenue > 0) {
+    lines.push({
+      accountCode: "3010",
+      credit: metalGemRevenue,
+      description: "Retail Jewellery Metal & Gem Sales Revenue",
+    });
+  }
+
+  if (gstTotal > 0) {
+    lines.push({
+      accountCode: "2040",
+      credit: gstTotal,
+      description: "Output GST Liability (CGST + SGST)",
+    });
+  }
+
+  // 4. Handle roundoff adjustment if any
+  if (invoice.roundoff && Math.abs(invoice.roundoff) > 0) {
+    if (invoice.roundoff > 0) {
+      lines.push({
+        accountCode: "3010",
+        credit: invoice.roundoff,
+        description: "Cash Round-off credit",
+      });
+    } else {
+      lines.push({
+        accountCode: "3010",
+        debit: Math.abs(invoice.roundoff),
+        description: "Cash Round-off discount",
+      });
+    }
+  }
+
+  return recordJournalPosting(
+    {
+      referenceType: "POS_SALE",
+      referenceId: invoice.invoiceNumber,
+      narration: `POS Tax Invoice #${invoice.invoiceNumber} - ${invoice.customer.name}`,
+      lines,
+    },
+    tenantId
+  );
+}
+
+export function postPurchaseToAccounts(
+  purchase: {
+    invoiceTotal: number;
+    paidAmount: number;
+    paymentMethod?: string;
+    invoiceNumber: string;
+    supplierName: string;
+  },
+  tenantId?: string
+): { success: boolean; entry?: JournalEntry } {
+  const lines: JournalEntryLine[] = [];
+
+  // Debit Inventory Stock (1040)
+  lines.push({
+    accountCode: "1040",
+    debit: purchase.invoiceTotal,
+    description: `Stock inwarded from ${purchase.supplierName}`,
+  });
+
+  // Credit Payment Source (1010/1020/1030) if paid
+  if (purchase.paidAmount > 0) {
+    let payCode = "1010";
+    if (purchase.paymentMethod === "Bank" || purchase.paymentMethod === "NEFT" || purchase.paymentMethod === "RTGS") {
+      payCode = "1020";
+    } else if (purchase.paymentMethod === "UPI") {
+      payCode = "1030";
+    }
+
+    lines.push({
+      accountCode: payCode,
+      credit: purchase.paidAmount,
+      description: `Payment to ${purchase.supplierName} via ${purchase.paymentMethod || "Cash"}`,
+    });
+  }
+
+  // Credit Supplier Payables (2010) for remaining balance
+  const balanceDue = purchase.invoiceTotal - purchase.paidAmount;
+  if (balanceDue > 0) {
+    lines.push({
+      accountCode: "2010",
+      credit: balanceDue,
+      description: `Accounts payable balance due to ${purchase.supplierName}`,
+    });
+  }
+
+  return recordJournalPosting(
+    {
+      referenceType: "PURCHASE",
+      referenceId: purchase.invoiceNumber,
+      narration: `Stock Purchase Bill #${purchase.invoiceNumber} from ${purchase.supplierName}`,
+      lines,
+    },
+    tenantId
+  );
+}
+
+export function postSupplierPaymentToAccounts(
+  payment: {
+    amount: number;
+    paymentMethod?: string;
+    supplierName: string;
+    receiptNumber?: string;
+  },
+  tenantId?: string
+): { success: boolean; entry?: JournalEntry } {
+  let payCode = "1010";
+  if (payment.paymentMethod === "Bank" || payment.paymentMethod === "NEFT" || payment.paymentMethod === "RTGS") {
+    payCode = "1020";
+  } else if (payment.paymentMethod === "UPI") {
+    payCode = "1030";
+  }
+
+  const lines: JournalEntryLine[] = [
+    {
+      accountCode: "2010",
+      debit: payment.amount,
+      description: `Settlement of supplier balance for ${payment.supplierName}`,
+    },
+    {
+      accountCode: payCode,
+      credit: payment.amount,
+      description: `Payment disbursed via ${payment.paymentMethod || "Cash"}`,
+    },
+  ];
+
+  return recordJournalPosting(
+    {
+      referenceType: "SUPPLIER_PAYMENT",
+      referenceId: payment.receiptNumber || `SPAY-${Date.now()}`,
+      narration: `Supplier Settlement: ${payment.supplierName} (₹${payment.amount})`,
+      lines,
+    },
+    tenantId
+  );
+}
+
+export function postKarigarLabourPaymentToAccounts(
+  payment: {
+    amount: number;
+    paymentMethod?: string;
+    karigarName: string;
+  },
+  tenantId?: string
+): { success: boolean; entry?: JournalEntry } {
+  let payCode = "1010";
+  if (payment.paymentMethod === "Bank" || payment.paymentMethod === "NEFT") {
+    payCode = "1020";
+  } else if (payment.paymentMethod === "UPI") {
+    payCode = "1030";
+  }
+
+  const lines: JournalEntryLine[] = [
+    {
+      accountCode: "2020",
+      debit: payment.amount,
+      description: `Labour charges paid to artisan ${payment.karigarName}`,
+    },
+    {
+      accountCode: payCode,
+      credit: payment.amount,
+      description: `Disbursed via ${payment.paymentMethod || "Cash"}`,
+    },
+  ];
+
+  return recordJournalPosting(
+    {
+      referenceType: "KARIGAR_LABOUR",
+      referenceId: `KLAY-${Date.now()}`,
+      narration: `Artisan Labour Settlement: ${payment.karigarName} (₹${payment.amount})`,
+      lines,
+    },
+    tenantId
+  );
+}
+
+export function postGirviLoanDisbursementToAccounts(
+  loan: {
+    principalAmount: number;
+    loanNumber: string;
+    customerName: string;
+  },
+  tenantId?: string
+): { success: boolean; entry?: JournalEntry } {
+  const lines: JournalEntryLine[] = [
+    {
+      accountCode: "1060",
+      debit: loan.principalAmount,
+      description: `Gold loan principal disbursed to ${loan.customerName}`,
+    },
+    {
+      accountCode: "1010",
+      credit: loan.principalAmount,
+      description: `Cash paid from counter drawer for pledge ${loan.loanNumber}`,
+    },
+  ];
+
+  return recordJournalPosting(
+    {
+      referenceType: "GIRVI_DISBURSEMENT",
+      referenceId: loan.loanNumber,
+      narration: `Girvi Gold Loan Disbursal #${loan.loanNumber} - ${loan.customerName}`,
+      lines,
+    },
+    tenantId
+  );
+}
+
+export function postGirviInterestReceiptToAccounts(
+  receipt: {
+    amount: number;
+    paymentMethod: string;
+    loanNumber: string;
+    customerName?: string;
+  },
+  tenantId?: string
+): { success: boolean; entry?: JournalEntry } {
+  let inCode = "1010";
+  if (receipt.paymentMethod === "UPI") inCode = "1030";
+  else if (receipt.paymentMethod === "Bank") inCode = "1020";
+
+  const lines: JournalEntryLine[] = [
+    {
+      accountCode: inCode,
+      debit: receipt.amount,
+      description: `Interest received via ${receipt.paymentMethod}`,
+    },
+    {
+      accountCode: "3030",
+      credit: receipt.amount,
+      description: `Pawn loan interest income for #${receipt.loanNumber}`,
+    },
+  ];
+
+  return recordJournalPosting(
+    {
+      referenceType: "GIRVI_INTEREST",
+      referenceId: receipt.loanNumber,
+      narration: `Girvi Monthly Interest Receipt #${receipt.loanNumber} - ${receipt.customerName || "Customer"}`,
+      lines,
+    },
+    tenantId
+  );
+}
+
+export function postGirviPrincipalRepaymentToAccounts(
+  repayment: {
+    amount: number;
+    paymentMethod: string;
+    loanNumber: string;
+    customerName?: string;
+  },
+  tenantId?: string
+): { success: boolean; entry?: JournalEntry } {
+  let inCode = "1010";
+  if (repayment.paymentMethod === "UPI") inCode = "1030";
+  else if (repayment.paymentMethod === "Bank") inCode = "1020";
+
+  const lines: JournalEntryLine[] = [
+    {
+      accountCode: inCode,
+      debit: repayment.amount,
+      description: `Principal repayment collected via ${repayment.paymentMethod}`,
+    },
+    {
+      accountCode: "1060",
+      credit: repayment.amount,
+      description: `Release of pawn principal for #${repayment.loanNumber}`,
+    },
+  ];
+
+  return recordJournalPosting(
+    {
+      referenceType: "GIRVI_REPAYMENT",
+      referenceId: repayment.loanNumber,
+      narration: `Girvi Principal Repayment & Pledge Release #${repayment.loanNumber}`,
+      lines,
+    },
+    tenantId
+  );
 }
