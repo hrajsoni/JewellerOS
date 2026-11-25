@@ -69,7 +69,7 @@ export const GirviManager: React.FC<GirviManagerProps> = ({
   const [interestRate, setInterestRate] = useState("1.5");
   const [interestType, setInterestType] = useState<"simple" | "compound">("simple");
   const [durationMonths, setDurationMonths] = useState("6");
-  const [packetNumber, setPacketNumber] = useState(`PKT-${Math.floor(100 + Math.random() * 900)}`);
+  const [packetNumber, setPacketNumber] = useState(() => `PKT-${Math.floor(100 + Math.random() * 900)}`);
   const [safeLocation, setSafeLocation] = useState("Tijori #1, Dabba #A");
   const [notes, setNotes] = useState("");
 

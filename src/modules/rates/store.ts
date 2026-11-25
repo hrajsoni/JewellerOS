@@ -1,9 +1,6 @@
 import { MetalRateRecord, UpdateMetalRatesInput } from "./types";
 import { UserSession } from "../auth/types";
 
-const RATES_STORAGE_KEY = "jewellery_os_active_metal_rates_v1";
-const RATES_HISTORY_STORAGE_KEY = "jewellery_os_metal_rates_history_v1";
-
 export function derivePuritiesFrom24k(gold24k: number): {
   gold22k: number;
   gold18k: number;

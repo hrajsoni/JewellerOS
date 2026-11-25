@@ -143,7 +143,7 @@ export const KarigarManager: React.FC<KarigarManagerProps> = ({
   const [jcTargetNet, setJcTargetNet] = useState("44.0");
   const [jcPurity, setJcPurity] = useState("22K (916)");
   const [jcIssuedFine, setJcIssuedFine] = useState("45.0");
-  const [jcDeliveryDate, setJcDeliveryDate] = useState(
+  const [jcDeliveryDate, setJcDeliveryDate] = useState(() =>
     new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0]
   );
   const [jcLabourRate, setJcLabourRate] = useState("450");

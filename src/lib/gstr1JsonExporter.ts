@@ -100,9 +100,7 @@ export function generateGstr1GovtJson(
     const invGstin = inv.customer?.gstin?.trim();
     const isB2B = invGstin && invGstin.length === 15 && !invGstin.startsWith("URP");
 
-    let invWeightGrams = 0;
     inv.items.forEach((item) => {
-      invWeightGrams += item.grossWeight || 0;
       if (item.metal === "silver") {
         totalSilverGrams += item.grossWeight || 0;
       } else {

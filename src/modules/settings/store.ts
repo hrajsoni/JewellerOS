@@ -1,9 +1,6 @@
 import {
   ShowroomMasterSettings,
   BackupDataSnapshot,
-  InvoicePrintConfig,
-  BarcodeLabelConfig,
-  BranchConfig,
   CloudBackupConfig,
 } from "./types";
 import { getSavedInvoices, saveInvoicesDirect } from "../invoicing/store";

@@ -98,6 +98,28 @@ export const CounterCalculator: React.FC<CounterCalculatorProps> = ({
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
   const [addedToast, setAddedToast] = useState<string | null>(null);
 
+  // Basic inputs
+  const [productName, setProductName] = useState("18K Gold Chain");
+  const [grossWeight, setGrossWeight] = useState<string>("10");
+  const [stoneDeduction, setStoneDeduction] = useState<string>("0");
+
+  // Metal Rates
+  const [goldRate, setGoldRate] = useState<string>(initialGoldRate.toString());
+  const [silverRate, setSilverRate] = useState<string>(initialSilverRate.toString());
+  const [silverUnit, setSilverUnit] = useState<SilverRateUnit>("per_kg");
+
+  // Karat / Fineness
+  const [goldPurity, setGoldPurity] = useState<GoldPurityKey>("18K");
+  const [silverPurity, setSilverPurity] = useState<SilverPurityKey>("925");
+
+  // Making charges
+  const [makingType, setMakingType] = useState<MakingChargeType>("percentage");
+  const [makingValue, setMakingValue] = useState<string>("18");
+
+  // Stones & Discount
+  const [stoneValue, setStoneValue] = useState<string>("0");
+  const [discount, setDiscount] = useState<string>("0");
+
   // Sync preloaded item when selected from inventory
   React.useEffect(() => {
     if (preloadedItem) {
@@ -112,16 +134,6 @@ export const CounterCalculator: React.FC<CounterCalculatorProps> = ({
     }
   }, [preloadedItem]);
 
-  // Basic inputs
-  const [productName, setProductName] = useState("18K Gold Chain");
-  const [grossWeight, setGrossWeight] = useState<string>("10");
-  const [stoneDeduction, setStoneDeduction] = useState<string>("0");
-
-  // Metal Rates
-  const [goldRate, setGoldRate] = useState<string>(initialGoldRate.toString());
-  const [silverRate, setSilverRate] = useState<string>(initialSilverRate.toString());
-  const [silverUnit, setSilverUnit] = useState<SilverRateUnit>("per_kg");
-
   // Keep rates in sync when updated via Daily Board
   React.useEffect(() => {
     setGoldRate(initialGoldRate.toString());
@@ -130,18 +142,6 @@ export const CounterCalculator: React.FC<CounterCalculatorProps> = ({
   React.useEffect(() => {
     setSilverRate(initialSilverRate.toString());
   }, [initialSilverRate]);
-
-  // Karat / Fineness
-  const [goldPurity, setGoldPurity] = useState<GoldPurityKey>("18K");
-  const [silverPurity, setSilverPurity] = useState<SilverPurityKey>("925");
-
-  // Making charges
-  const [makingType, setMakingType] = useState<MakingChargeType>("percentage");
-  const [makingValue, setMakingValue] = useState<string>("18");
-
-  // Stones & Discount
-  const [stoneValue, setStoneValue] = useState<string>("0");
-  const [discount, setDiscount] = useState<string>("0");
 
   // Tax
   const [applyGst, setApplyGst] = useState<boolean>(false);

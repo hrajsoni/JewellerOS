@@ -1,10 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import React, { createContext, useContext, useState, ReactNode, useCallback } from "react";
 import { UserSession, RoleType, PermissionKey, LoginCredentials, UserProfile } from "./types";
 import {
   getCurrentSession,
-  setCurrentSession,
   switchActiveUser,
   loginWithCredentials,
   logoutUser,
@@ -13,7 +12,7 @@ import {
   adminResetPin as storeAdminResetPin,
   DEFAULT_SESSION,
 } from "./store";
-import { hasPermission as checkPermission, ROLE_PERMISSIONS } from "./permissions";
+import { hasPermission as checkPermission } from "./permissions";
 
 export interface AuthContextType {
   user: UserSession;
@@ -40,17 +39,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return DEFAULT_SESSION;
   });
 
-  const [allUsers, setAllUsers] = useState<(UserProfile & { pin: string })[]>(() =>
-    getTenantUsers(DEFAULT_SESSION.businessId)
-  );
+  const [allUsers, setAllUsers] = useState<(UserProfile & { pin: string })[]>(() => {
+    if (typeof window !== "undefined") {
+      const session = getCurrentSession();
+      return getTenantUsers(session.businessId);
+    }
+    return getTenantUsers(DEFAULT_SESSION.businessId);
+  });
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
-
-  useEffect(() => {
-    const session = getCurrentSession();
-    setUser(session);
-    setAllUsers(getTenantUsers(session.businessId));
-  }, []);
 
   const refreshUsers = useCallback((tenantId?: string) => {
     setAllUsers(getTenantUsers(tenantId || user.businessId));

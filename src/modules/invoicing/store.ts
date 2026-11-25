@@ -4,7 +4,6 @@ import {
   CustomerProfile,
   FinalizedInvoice,
   PaymentRecord,
-  RestockDestination,
   SalesReturnItem,
   SalesReturnRecord,
 } from "./types";

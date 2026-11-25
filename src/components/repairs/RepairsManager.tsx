@@ -90,7 +90,7 @@ export const RepairsManager: React.FC<RepairsManagerProps> = ({
   const [repCondition, setRepCondition] = useState("Broken clasp / hook joint");
   const [repType, setRepType] = useState<RepairType>("solder_joint");
   const [repCharges, setRepCharges] = useState("500");
-  const [repDeliveryDate, setRepDeliveryDate] = useState(
+  const [repDeliveryDate, setRepDeliveryDate] = useState(() =>
     new Date(Date.now() + 3 * 86400000).toISOString().split("T")[0]
   );
   const [repKarigar, setRepKarigar] = useState("Gopal Babu");
@@ -109,7 +109,7 @@ export const RepairsManager: React.FC<RepairsManagerProps> = ({
   const [bookEstTotal, setBookEstTotal] = useState("350000");
   const [bookAdvance, setBookAdvance] = useState("50000");
   const [bookAdvanceMode, setBookAdvanceMode] = useState<"Cash" | "UPI" | "Bank" | "OldGold">("UPI");
-  const [bookDueDate, setBookDueDate] = useState(
+  const [bookDueDate, setBookDueDate] = useState(() =>
     new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0]
   );
   const [bookNotes, setBookNotes] = useState("");
