@@ -1,4 +1,12 @@
-import { StockItem, Supplier, StockMovementRecord, StockStatus, JewelleryCategory } from "./types";
+import {
+  StockItem,
+  Supplier,
+  StockMovementRecord,
+  StockStatus,
+  JewelleryCategory,
+  StockAuditItem,
+  StockAuditSession,
+} from "./types";
 import { UserSession } from "../auth/types";
 import { InvoiceLineItem, OldGoldExchangeItem } from "../invoicing/types";
 
@@ -262,6 +270,8 @@ export function getSavedStock(tenantId?: string): StockItem[] {
     return INITIAL_STOCK_ITEMS;
   }
 }
+
+export const getStockItems = getSavedStock;
 
 export function saveStockItems(items: StockItem[], tenantId?: string): void {
   try {
@@ -564,3 +574,157 @@ export function ingestOldGoldScrap(
   saveStockItems(updatedStock, tenantId);
   return updatedStock;
 }
+
+export function getUniqueTrayLocations(tenantId?: string): string[] {
+  const stock = getStockItems(tenantId);
+  const trays = new Set<string>();
+  stock.forEach((item) => {
+    if (item.trayLocation) trays.add(item.trayLocation);
+  });
+  return Array.from(trays).sort();
+}
+
+export function startStockAudit(
+  trayLocation?: string,
+  category?: string,
+  auditorName = "Floor Manager",
+  tenantId?: string
+): StockAuditSession {
+  const stock = getStockItems(tenantId);
+  const eligibleItems = stock.filter((item) => {
+    if (item.status === "sold" || item.status === "returned_to_supplier") return false;
+    if (trayLocation && trayLocation !== "ALL" && item.trayLocation !== trayLocation) return false;
+    if (category && category !== "ALL" && item.category !== category) return false;
+    return true;
+  });
+
+  const auditItems: StockAuditItem[] = eligibleItems.map((item) => ({
+    stockItemId: item.id,
+    barcode: item.barcode,
+    sku: item.sku,
+    name: item.name,
+    category: item.category,
+    trayLocation: item.trayLocation,
+    grossWeight: item.grossWeight,
+    expectedStatus: item.status,
+    isFound: false,
+  }));
+
+  return {
+    id: `audit-${Date.now()}`,
+    trayLocation: trayLocation || "ALL",
+    category: category || "ALL",
+    startedAt: new Date().toISOString(),
+    auditedBy: auditorName,
+    expectedCount: auditItems.length,
+    scannedCount: 0,
+    missingCount: auditItems.length,
+    surplusCount: 0,
+    status: "in_progress",
+    items: auditItems,
+    surplusBarcodes: [],
+  };
+}
+
+export function scanBarcodeInAudit(
+  session: StockAuditSession,
+  rawBarcode: string
+): {
+  updatedSession: StockAuditSession;
+  matchedItem?: StockAuditItem;
+  isAlreadyScanned: boolean;
+  isSurplus: boolean;
+} {
+  const barcode = rawBarcode.trim();
+  const existing = session.items.find(
+    (i) => i.barcode === barcode || i.sku.toLowerCase() === barcode.toLowerCase()
+  );
+
+  if (existing) {
+    if (existing.isFound) {
+      return { updatedSession: session, matchedItem: existing, isAlreadyScanned: true, isSurplus: false };
+    }
+
+    const updatedItems = session.items.map((i) =>
+      i.stockItemId === existing.stockItemId
+        ? { ...i, isFound: true, scannedAt: new Date().toISOString() }
+        : i
+    );
+
+    const scannedCount = updatedItems.filter((i) => i.isFound).length;
+    const missingCount = updatedItems.length - scannedCount;
+
+    const nextSession: StockAuditSession = {
+      ...session,
+      items: updatedItems,
+      scannedCount,
+      missingCount,
+      status: missingCount === 0 ? "reconciled" : "in_progress",
+    };
+
+    return { updatedSession: nextSession, matchedItem: existing, isAlreadyScanned: false, isSurplus: false };
+  }
+
+  // Not in expected list -> Surplus or from another tray
+  const currentSurplus = session.surplusBarcodes || [];
+  const nextSurplus = currentSurplus.includes(barcode) ? currentSurplus : [...currentSurplus, barcode];
+
+  const nextSession: StockAuditSession = {
+    ...session,
+    surplusBarcodes: nextSurplus,
+    surplusCount: nextSurplus.length,
+  };
+
+  return { updatedSession: nextSession, isAlreadyScanned: false, isSurplus: true };
+}
+
+export function reconcileStockAudit(
+  session: StockAuditSession,
+  missingAction: "flag_missing" | "keep_unchanged",
+  operator: { id: string; fullName: string; role: any },
+  tenantId?: string
+): { updatedStock: StockItem[]; reconciledSession: StockAuditSession } {
+  let stock = getStockItems(tenantId);
+  const missingItems = session.items.filter((i) => !i.isFound);
+
+  if (missingAction === "flag_missing" && missingItems.length > 0) {
+    const missingIds = new Set(missingItems.map((m) => m.stockItemId));
+    stock = stock.map((item) => {
+      if (missingIds.has(item.id)) {
+        recordStockMovement(
+          {
+            stockItemId: item.id,
+            sku: item.sku,
+            productName: item.name,
+            fromStatus: item.status,
+            toStatus: "damaged",
+            fromLocation: item.trayLocation,
+            toLocation: "Discrepancy Audit Lost & Found",
+            reason: `Physical Stock Audit Discrepancy (Session ${session.id})`,
+            performedById: operator.id,
+            performedByName: operator.fullName,
+            performedByRole: operator.role,
+          },
+          tenantId
+        );
+        return {
+          ...item,
+          status: "damaged" as StockStatus,
+          notes: `Flagged missing during Physical Stock Audit on ${new Date().toLocaleDateString()}`,
+        };
+      }
+      return item;
+    });
+
+    saveStockItems(stock, tenantId);
+  }
+
+  const reconciledSession: StockAuditSession = {
+    ...session,
+    completedAt: new Date().toISOString(),
+    status: missingItems.length > 0 ? "discrepancy_flagged" : "reconciled",
+  };
+
+  return { updatedStock: stock, reconciledSession };
+}
+

@@ -10,6 +10,7 @@ import { GlassBadge } from "../glass/GlassBadge";
 import { JewelleryBarcodeTag } from "./JewelleryBarcodeTag";
 import { BulkStockImportModal } from "./BulkStockImportModal";
 import { StockMovementModal } from "./StockMovementModal";
+import { StockAuditModal } from "./StockAuditModal";
 import {
   generateBarcodeForIndex,
   generateSkuForCategory,
@@ -81,6 +82,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [activeTagItem, setActiveTagItem] = useState<StockItem | null>(null);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [activeMovementItem, setActiveMovementItem] = useState<StockItem | null>(null);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [movements, setMovements] = useState<StockMovementRecord[]>([]);
 
   useEffect(() => {
@@ -236,6 +238,15 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <GlassButton
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsAuditModalOpen(true)}
+            icon={<ShieldCheck size={14} className="text-[#DFC488]" />}
+          >
+            Physical Stock Audit
+          </GlassButton>
+
           <GlassButton
             variant="secondary"
             size="sm"
@@ -757,6 +768,17 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         item={activeMovementItem}
         onUpdateStatus={handleUpdateStatus}
         movementHistory={movements}
+      />
+
+      {/* Physical Stock Audit & Tray Reconciliation Modal */}
+      <StockAuditModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        onStockUpdated={(newStock) => {
+          if (onBulkImportStockItems) {
+            onBulkImportStockItems(newStock);
+          }
+        }}
       />
     </div>
   );

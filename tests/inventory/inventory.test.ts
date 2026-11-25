@@ -6,6 +6,11 @@ import {
   updateStockItemStatus,
   recordStockMovement,
   INITIAL_STOCK_ITEMS,
+  startStockAudit,
+  scanBarcodeInAudit,
+  reconcileStockAudit,
+  getStockItems,
+  saveStockItems,
 } from "../../src/modules/inventory/store";
 import { generateBarcodeSvg } from "../../src/lib/barcode";
 import { UserSession } from "../../src/modules/auth/types";
@@ -81,5 +86,57 @@ describe("JewelleryOS Inventory, Barcode & Stock Movement Tests", () => {
     assert.strictEqual(movement.toStatus, "in_vault");
     assert.strictEqual(movement.performedByName, "Vikram Soni");
     assert.ok(movement.timestamp);
+  });
+
+  test("Physical Stock Audit & Tray Reconciliation (DEF-018): Detects scanned pieces, surplus, and flags missing items", () => {
+    const tenantId = "tenant-audit-test";
+    saveStockItems(INITIAL_STOCK_ITEMS, tenantId);
+
+    // 1. Start audit for Chains tray
+    const auditSession = startStockAudit("Tray #2 · Chains Display", "Chains", "Vikram Soni", tenantId);
+    assert.ok(auditSession.id);
+    assert.strictEqual(auditSession.expectedCount, 1);
+    assert.strictEqual(auditSession.scannedCount, 0);
+    assert.strictEqual(auditSession.missingCount, 1);
+
+    // 2. Scan expected chain barcode 8901840001
+    const scan1 = scanBarcodeInAudit(auditSession, "8901840001");
+    assert.strictEqual(scan1.isAlreadyScanned, false);
+    assert.strictEqual(scan1.isSurplus, false);
+    assert.strictEqual(scan1.matchedItem?.sku, "CHN-18K-084");
+    assert.strictEqual(scan1.updatedSession.scannedCount, 1);
+    assert.strictEqual(scan1.updatedSession.missingCount, 0);
+    assert.strictEqual(scan1.updatedSession.status, "reconciled");
+
+    // 3. Scan same item again -> flagged duplicate
+    const scanDup = scanBarcodeInAudit(scan1.updatedSession, "8901840001");
+    assert.strictEqual(scanDup.isAlreadyScanned, true);
+
+    // 4. Scan untracked item -> flagged surplus
+    const scanSurplus = scanBarcodeInAudit(scan1.updatedSession, "9999999999");
+    assert.strictEqual(scanSurplus.isSurplus, true);
+    assert.strictEqual(scanSurplus.updatedSession.surplusCount, 1);
+
+    // 5. Test reconciliation with a missing item
+    const broadAudit = startStockAudit("ALL", "ALL", "Vikram Soni", tenantId);
+    assert.ok(broadAudit.expectedCount >= 3);
+
+    // Scan only 1 item, leaving remaining missing
+    const partialScan = scanBarcodeInAudit(broadAudit, "8901840001");
+    assert.ok(partialScan.updatedSession.missingCount > 0);
+
+    // Reconcile and flag missing items as damaged/lost
+    const reconcileRes = reconcileStockAudit(
+      partialScan.updatedSession,
+      "flag_missing",
+      mockClerkSession,
+      tenantId
+    );
+
+    assert.strictEqual(reconcileRes.reconciledSession.status, "discrepancy_flagged");
+    // Verified that missing items in stock were flagged
+    const updatedStock = getStockItems(tenantId);
+    const unscannedItem = updatedStock.find((i) => i.barcode === "8902240002");
+    assert.strictEqual(unscannedItem?.status, "damaged");
   });
 });

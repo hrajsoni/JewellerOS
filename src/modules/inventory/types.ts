@@ -84,3 +84,34 @@ export interface Supplier {
   totalPurchasedGrams: number;
   outstandingBalance: number;
 }
+
+export interface StockAuditItem {
+  stockItemId: string;
+  barcode: string;
+  sku: string;
+  name: string;
+  category: string;
+  trayLocation: string;
+  grossWeight: number;
+  expectedStatus: StockStatus;
+  scannedAt?: string;
+  isFound: boolean;
+}
+
+export interface StockAuditSession {
+  id: string;
+  trayLocation: string;
+  category?: string;
+  startedAt: string;
+  completedAt?: string;
+  auditedBy: string;
+  expectedCount: number;
+  scannedCount: number;
+  missingCount: number;
+  surplusCount: number;
+  status: "in_progress" | "reconciled" | "discrepancy_flagged";
+  items: StockAuditItem[];
+  surplusBarcodes?: string[];
+  notes?: string;
+}
+
