@@ -591,7 +591,8 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
               Daily Cash Closing Audit Log (दैनिक रोकड़ मिलान इतिहास)
             </h3>
             <GlassPanel className="p-0 overflow-hidden">
-              <div className="overflow-x-auto">
+              {/* Desktop Table View */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-white/[0.06] text-[var(--text-secondary)] uppercase tracking-wider text-[11px] bg-white/[0.01]">
@@ -669,6 +670,71 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Card Stack View (< 640px) */}
+              <div className="block sm:hidden divide-y divide-white/[0.04] p-3 space-y-3">
+                {dailyClosings.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">
+                    No daily closings recorded yet.
+                  </div>
+                ) : (
+                  dailyClosings.map((c) => {
+                    const outflows = c.supplierCashPaid + c.karigarCashPaid + c.cashExpenses;
+                    return (
+                      <div key={c.id} className="pt-3 first:pt-0 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="font-mono font-medium text-xs text-[var(--text-primary)]">
+                            {new Date(c.date).toLocaleDateString("en-IN", {
+                              weekday: "short",
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                          <GlassBadge
+                            variant={
+                              c.status === "tallied"
+                                ? "emerald"
+                                : c.status === "shortage"
+                                ? "coral"
+                                : "gold"
+                            }
+                            size="sm"
+                          >
+                            {c.status === "tallied"
+                              ? "मिलान सही"
+                              : c.status === "shortage"
+                              ? `कमी: -₹${Math.abs(c.discrepancy)}`
+                              : `अधिक: +₹${c.discrepancy}`}
+                          </GlassBadge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-[10px] text-[var(--text-tertiary)] block">Opening Cash</span>
+                            <span className="font-mono">{formatINR(c.openingCash)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-[var(--text-tertiary)] block">Physical Count</span>
+                            <span className="font-mono font-bold text-[#DFC488]">{formatINR(c.physicalCash)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-[var(--text-tertiary)] block">Cash Sales</span>
+                            <span className="font-mono text-[var(--accent-emerald)] font-semibold">+{formatINR(c.cashSales)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-[var(--text-tertiary)] block">Total Outflows</span>
+                            <span className="font-mono text-[var(--accent-coral)]">-{formatINR(outflows)}</span>
+                          </div>
+                        </div>
+                        <div className="text-[10px] text-[var(--text-tertiary)] flex justify-between pt-1">
+                          <span>Verified by: {c.closedBy}</span>
+                          {c.notes && <span className="italic">{c.notes}</span>}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </GlassPanel>
           </div>
         </div>
@@ -678,7 +744,8 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       {activeTab === "expenses" && (
         <div className="space-y-4">
           <GlassPanel className="p-0 overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[var(--text-secondary)] uppercase tracking-wider text-[11px] bg-white/[0.01]">
@@ -751,6 +818,45 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Card Stack View (< 640px) */}
+            <div className="block sm:hidden divide-y divide-white/[0.04] p-3 space-y-3">
+              {expenses.length === 0 ? (
+                <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">
+                  No expenses logged yet.
+                </div>
+              ) : (
+                expenses
+                  .filter((exp) => {
+                    const q = searchQuery.toLowerCase();
+                    return (
+                      exp.category.toLowerCase().includes(q) ||
+                      exp.paidTo.toLowerCase().includes(q) ||
+                      (exp.voucherNumber && exp.voucherNumber.toLowerCase().includes(q)) ||
+                      (exp.notes && exp.notes.toLowerCase().includes(q))
+                    );
+                  })
+                  .map((exp) => (
+                    <div key={exp.id} className="pt-3 first:pt-0 space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-mono text-xs font-semibold text-[#DFC488]">{exp.voucherNumber || "VOUCHER"}</span>
+                        <span className="font-mono font-bold text-xs text-[var(--accent-coral)]">-{formatINR(exp.amount)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-medium text-[var(--text-primary)]">{exp.category}</span>
+                        <GlassBadge variant={exp.paymentMode === "Cash" ? "gold" : "emerald"} size="sm">{exp.paymentMode}</GlassBadge>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px] text-[var(--text-secondary)]">
+                        <span>Paid to: {exp.paidTo}</span>
+                        <span className="text-[10px] text-[var(--text-tertiary)]">{new Date(exp.date).toLocaleDateString("en-IN")}</span>
+                      </div>
+                      {exp.notes && (
+                        <div className="text-[10px] text-[var(--text-tertiary)] italic">{exp.notes}</div>
+                      )}
+                    </div>
+                  ))
+              )}
+            </div>
           </GlassPanel>
         </div>
       )}
@@ -759,7 +865,8 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       {activeTab === "chart" && (
         <div className="space-y-4">
           <GlassPanel className="p-0 overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[var(--text-secondary)] uppercase tracking-wider text-[11px] bg-white/[0.01]">
@@ -818,6 +925,48 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                     })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card Stack View (< 640px) */}
+            <div className="block sm:hidden divide-y divide-white/[0.04] p-3 space-y-3">
+              {accounts
+                .filter((acc) => {
+                  const q = searchQuery.toLowerCase();
+                  return (
+                    acc.code.includes(q) ||
+                    acc.name.toLowerCase().includes(q) ||
+                    acc.nameHindi.includes(q) ||
+                    acc.type.includes(q)
+                  );
+                })
+                .map((acc) => {
+                  const typeVariant: "gold" | "emerald" | "coral" | "neutral" =
+                    acc.type === "asset"
+                      ? "emerald"
+                      : acc.type === "liability"
+                      ? "coral"
+                      : acc.type === "revenue"
+                      ? "gold"
+                      : "neutral";
+
+                  return (
+                    <div key={acc.id} className="pt-3 first:pt-0 space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs text-[#DFC488]">{acc.code}</span>
+                          <GlassBadge variant={typeVariant} size="sm">{acc.type.toUpperCase()}</GlassBadge>
+                        </div>
+                        <span className="font-mono font-bold text-xs text-[var(--text-primary)]">{formatINR(acc.balance)}</span>
+                      </div>
+                      <div className="text-xs font-medium text-[var(--text-primary)]">
+                        {acc.name} <span className="text-[11px] text-[var(--text-tertiary)] font-normal">({acc.nameHindi})</span>
+                      </div>
+                      {acc.notes && (
+                        <div className="text-[10px] text-[var(--text-secondary)]">{acc.notes}</div>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
           </GlassPanel>
         </div>

@@ -493,7 +493,8 @@ export const ReportsOverview: React.FC<ReportsOverviewProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[var(--text-secondary)] uppercase text-[11px]">
@@ -531,6 +532,37 @@ export const ReportsOverview: React.FC<ReportsOverviewProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Card Stack View (< 640px) */}
+            <div className="block sm:hidden space-y-3">
+              <div className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06] space-y-2">
+                <div className="flex justify-between items-center border-b border-white/[0.06] pb-2">
+                  <span className="font-mono font-bold text-[#DFC488]">HSN 711319</span>
+                  <GlassBadge variant="emerald" size="sm">GST 3%</GlassBadge>
+                </div>
+                <div className="text-xs text-[var(--text-primary)] font-medium">
+                  Gold & Silver Jewellery Articles
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] block">UQC (Quantity)</span>
+                    <span className="font-mono text-[#DFC488]">{totalGoldGrossGrams.toFixed(2)} GMS</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] block">Total Value</span>
+                    <span className="font-mono font-bold">{formatINR(totalSales)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] block">Taxable Value</span>
+                    <span className="font-mono">{formatINR(totalTaxable)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] block">CGST + SGST (3%)</span>
+                    <span className="font-mono text-[var(--accent-emerald)]">{formatINR(totalCgst + totalSgst)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </GlassPanel>
 
           {/* Section 139A High Value Transactions (> ₹2 Lakh) PAN Audit */}
@@ -557,7 +589,8 @@ export const ReportsOverview: React.FC<ReportsOverviewProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[var(--text-secondary)] uppercase text-[11px]">
@@ -609,6 +642,39 @@ export const ReportsOverview: React.FC<ReportsOverviewProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Card Stack View (< 640px) */}
+            <div className="block sm:hidden space-y-3">
+              {highValueInvoices.map((inv) => {
+                const hasPan = inv.customer?.panNumber || inv.customer?.aadhaarUid;
+                return (
+                  <div key={inv.id} className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06] space-y-2.5">
+                    <div className="flex justify-between items-center border-b border-white/[0.06] pb-2">
+                      <span className="font-mono font-semibold text-[#DFC488]">{inv.invoiceNumber}</span>
+                      <span className="font-mono font-bold text-sm text-[var(--text-primary)]">{formatINR(inv.grandTotal)}</span>
+                    </div>
+                    <div className="flex justify-between items-start text-xs">
+                      <div>
+                        <div className="font-medium text-[var(--text-primary)]">{inv.customer.name}</div>
+                        <div className="text-[10px] text-[var(--text-tertiary)]">{inv.customer.phone} · {inv.customer.city}</div>
+                      </div>
+                      <div>
+                        {hasPan ? (
+                          <GlassBadge variant="emerald" size="sm">✓ {inv.customer.panNumber || inv.customer.aadhaarUid}</GlassBadge>
+                        ) : (
+                          <GlassBadge variant="coral" size="sm">⚠️ Missing PAN</GlassBadge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {highValueInvoices.length === 0 && (
+                <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">
+                  No transactions above ₹2,00,000 threshold in selected period.
+                </div>
+              )}
+            </div>
           </GlassPanel>
         </div>
       )}
@@ -656,7 +722,8 @@ export const ReportsOverview: React.FC<ReportsOverviewProps> = ({
               </GlassBadge>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[var(--text-secondary)] uppercase text-[11px]">
@@ -694,6 +761,35 @@ export const ReportsOverview: React.FC<ReportsOverviewProps> = ({
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card Stack View (< 640px) */}
+            <div className="block sm:hidden space-y-3">
+              {Object.entries(categorySummary).map(([cat, stats]) => {
+                const spread = Math.max(0, stats.retailEstimate - stats.acquisitionCost);
+                return (
+                  <div key={cat} className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06] space-y-2">
+                    <div className="flex justify-between items-center border-b border-white/[0.06] pb-2">
+                      <span className="font-semibold text-sm text-[var(--text-primary)]">{cat}</span>
+                      <span className="text-xs font-mono text-[#DFC488] bg-[#C5A059]/10 px-2 py-0.5 rounded">{stats.pieces} pcs · {stats.grossWeight.toFixed(3)}g</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                      <div>
+                        <span className="text-[10px] text-[var(--text-tertiary)] block">Acquisition Cost</span>
+                        <span className="font-mono text-[var(--text-secondary)]">{formatINR(stats.acquisitionCost)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-[var(--text-tertiary)] block">Retail Valuation</span>
+                        <span className="font-mono font-bold text-[var(--text-primary)]">{formatINR(stats.retailEstimate)}</span>
+                      </div>
+                      <div className="col-span-2 pt-1 border-t border-white/[0.04] flex justify-between items-center">
+                        <span className="text-[10px] text-[var(--text-tertiary)]">Estimated Gross Spread</span>
+                        <span className="font-mono font-semibold text-[var(--accent-emerald)]">+{formatINR(spread)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </GlassPanel>
         </div>
@@ -742,7 +838,8 @@ export const ReportsOverview: React.FC<ReportsOverviewProps> = ({
               </GlassBadge>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[var(--text-secondary)] uppercase text-[11px]">
@@ -781,6 +878,31 @@ export const ReportsOverview: React.FC<ReportsOverviewProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card Stack View (< 640px) */}
+            <div className="block sm:hidden space-y-2.5">
+              {expenses.map((e) => (
+                <div key={e.id} className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06] space-y-1.5">
+                  <div className="flex justify-between items-center border-b border-white/[0.06] pb-1.5">
+                    <span className="font-mono font-semibold text-xs text-[#DFC488]">{e.voucherNumber || "VOUCHER"}</span>
+                    <span className="font-mono font-bold text-xs text-red-400">-{formatINR(e.amount)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-medium capitalize text-[var(--text-primary)]">{e.category}</span>
+                    <span className="text-[10px] text-[var(--text-tertiary)]">{new Date(e.date).toLocaleDateString("en-IN")}</span>
+                  </div>
+                  <div className="text-[11px] text-[var(--text-secondary)] flex justify-between">
+                    <span>Paid to: {e.paidTo}</span>
+                    <span className="text-[var(--text-tertiary)]">{e.notes || ""}</span>
+                  </div>
+                </div>
+              ))}
+              {expenses.length === 0 && (
+                <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">
+                  No expense vouchers logged yet.
+                </div>
+              )}
             </div>
           </GlassPanel>
         </div>
