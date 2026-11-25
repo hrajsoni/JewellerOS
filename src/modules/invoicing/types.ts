@@ -96,3 +96,37 @@ export interface FinalizedInvoice {
     gstin: string;
   };
 }
+
+export type RestockDestination = "showcase" | "repair_vault" | "melting_scrap";
+
+export interface SalesReturnItem {
+  invoiceItemId: string;
+  stockItemId?: string;
+  barcode?: string;
+  sku?: string;
+  name: string;
+  metal: "gold" | "silver";
+  purity: string;
+  grossWeight: number;
+  netWeight: number;
+  refundRatePerGram: number;
+  returnedAmount: number;
+  restockDestination: RestockDestination;
+  reason: string;
+}
+
+export interface SalesReturnRecord {
+  id: string;
+  creditNoteNumber: string; // e.g. "CRN-2026-001"
+  originalInvoiceNumber: string;
+  originalInvoiceId?: string;
+  date: string;
+  customer: CustomerProfile;
+  returnedItems: SalesReturnItem[];
+  totalRefundAmount: number;
+  refundMethod: "Cash" | "UPI" | "Bank Transfer" | "Credit Note";
+  creditNoteBalance?: number;
+  notes?: string;
+  processedBy: string;
+}
+

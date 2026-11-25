@@ -5,6 +5,7 @@ import {
   ingestOldGoldScrap,
   INITIAL_STOCK_ITEMS,
   saveStockItems,
+  getSavedStock,
 } from "../../src/modules/inventory/store";
 import { StockItem } from "../../src/modules/inventory/types";
 import {
@@ -12,7 +13,13 @@ import {
   OldGoldExchangeItem,
   PaymentRecord,
   FinalizedInvoice,
+  SalesReturnItem,
 } from "../../src/modules/invoicing/types";
+import {
+  processSalesReturn,
+  getSalesReturns,
+  saveNewInvoice,
+} from "../../src/modules/invoicing/store";
 
 describe("JewelleryOS Milestone 4: Billing POS & Transaction Pipeline Tests", () => {
   const mockCashier = {
@@ -247,6 +254,138 @@ describe("JewelleryOS Milestone 4: Billing POS & Transaction Pipeline Tests", ()
 
     assert.strictEqual(soldCount, 1, "Exactly one ring should be marked as sold");
     assert.strictEqual(inShowcaseCount, 1, "The second ring must remain in_showcase");
+  });
+
+  test("Sales Returns & Credit Notes (DEF-019): Restocks returned pieces to showcase and issues numbered Credit Note", () => {
+    const tenantId = "tenant-returns-test";
+    const testRing: StockItem = {
+      id: "stock-ret-ring-1",
+      sku: "RNG-22K-RET",
+      barcode: "8902249999",
+      name: "22K Solitaire Returnable Ring",
+      category: "Rings",
+      metal: "gold",
+      purity: "22K",
+      purityDisplay: "22K (22/24)",
+      grossWeight: 5.0,
+      stoneWeight: 0,
+      netWeight: 5.0,
+      fineWeight: 4.583,
+      acquisitionCost: 50000,
+      defaultMakingType: "percentage",
+      defaultMakingValue: 18,
+      trayLocation: "Tray #1 · Rings Display",
+      status: "sold", // Currently sold to customer
+      dateAdded: "2026-10-01",
+    };
+    saveStockItems([testRing], tenantId);
+
+    // Seed original retail bill
+    const invoiceNumber = "INV-2026-RET-01";
+    const seedInvoice: FinalizedInvoice = {
+      id: "inv-ret-01",
+      invoiceNumber,
+      invoiceDate: "2026-10-05",
+      createdAt: "2026-10-05T10:00:00.000Z",
+      customer: {
+        id: "cust-ret-1",
+        name: "Shri Rameshwar Lal",
+        phone: "+91 94140 55667",
+      },
+      items: [
+        {
+          id: "item-ret-line-1",
+          stockItemId: "stock-ret-ring-1",
+          sku: "RNG-22K-RET",
+          barcode: "8902249999",
+          name: "22K Solitaire Returnable Ring",
+          metal: "gold",
+          purity: "22K",
+          purityDisplay: "22K (22/24)",
+          grossWeight: 5.0,
+          stoneWeight: 0,
+          netWeight: 5.0,
+          metalRate: 150000,
+          effectiveRatePerGram: 13750,
+          metalValue: 68750,
+          makingType: "percentage",
+          makingRate: 18,
+          makingCharges: 12375,
+          stoneValue: 0,
+          discount: 0,
+          totalBeforeTax: 81125,
+          fineWeight: 4.583,
+          fineGoldValue24k: 68750,
+          wastagePercentage: 0,
+        },
+      ],
+      itemsSubtotal: 81125,
+      oldGoldTotalCredit: 0,
+      discountTotal: 0,
+      taxableAmount: 81125,
+      gstPercentage: 3,
+      cgstAmount: 1216.88,
+      sgstAmount: 1216.88,
+      totalGst: 2433.75,
+      roundoff: 0.25,
+      grandTotal: 83559,
+      payments: [{ method: "Cash", amount: 83559 }],
+      totalPaid: 83559,
+      balanceDue: 0,
+      status: "paid",
+      shopSnapshot: {
+        name: "Sandhya Jewellers",
+        address: "142 Sarafa Bazar, Jaipur",
+        phone: "+91 94140 12345",
+        gstin: "08AAAAJ1234F1Z8",
+      },
+    };
+    saveNewInvoice(seedInvoice, tenantId);
+
+    // Process Return: Customer returns ring for full refund as Credit Note
+    const returnItem: SalesReturnItem = {
+      invoiceItemId: "item-ret-line-1",
+      stockItemId: "stock-ret-ring-1",
+      barcode: "8902249999",
+      sku: "RNG-22K-RET",
+      name: "22K Solitaire Returnable Ring",
+      metal: "gold",
+      purity: "22K",
+      grossWeight: 5.0,
+      netWeight: 5.0,
+      refundRatePerGram: 13750,
+      returnedAmount: 81125,
+      restockDestination: "showcase",
+      reason: "Size mismatch / Exchange",
+    };
+
+    const res = processSalesReturn(
+      {
+        originalInvoiceNumber: invoiceNumber,
+        returnedItems: [returnItem],
+        totalRefundAmount: 81125,
+        refundMethod: "Credit Note",
+        notes: "Approved by Owner Harshit Raj",
+      },
+      mockCashier,
+      tenantId
+    );
+
+    // 1. Verify Credit Note Number generation
+    assert.ok(res.returnRecord.creditNoteNumber.startsWith("CRN-"));
+    assert.strictEqual(res.returnRecord.totalRefundAmount, 81125);
+    assert.strictEqual(res.returnRecord.refundMethod, "Credit Note");
+
+    // 2. Verify Return is saved in Returns Registry
+    const allReturns = getSalesReturns(tenantId);
+    assert.strictEqual(allReturns.length, 1);
+    assert.strictEqual(allReturns[0].originalInvoiceNumber, invoiceNumber);
+
+    // 3. Verify Stock Reversal: Ring status must transition from 'sold' back to 'in_showcase'
+    const updatedStock = getSavedStock(tenantId);
+    const restockedRing = updatedStock.find((s) => s.id === "stock-ret-ring-1");
+    assert.ok(restockedRing);
+    assert.strictEqual(restockedRing.status, "in_showcase", "Returned item must transition back to in_showcase");
   });
 });
 

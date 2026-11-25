@@ -4,7 +4,12 @@ import {
   CustomerProfile,
   FinalizedInvoice,
   PaymentRecord,
+  RestockDestination,
+  SalesReturnItem,
+  SalesReturnRecord,
 } from "./types";
+import { getSavedStock, saveStockItems, recordStockMovement } from "../inventory/store";
+import { recordJournalPosting } from "../accounts/store";
 
 const STORAGE_KEY = "jewellery_os_invoices_v2";
 
@@ -248,5 +253,172 @@ export function saveInvoicesDirect(invoices: FinalizedInvoice[], tenantId?: stri
     console.error("Failed to save invoices directly to storage:", err);
   }
 }
+
+export const inMemoryReturnsCache: Record<string, string> = {};
+
+export function getTenantReturnsStorageKey(tenantId?: string): string {
+  return `jewellery_os_tenant_${tenantId || "default"}_sales_returns_v1`;
+}
+
+export function getSalesReturns(tenantId?: string): SalesReturnRecord[] {
+  const key = getTenantReturnsStorageKey(tenantId);
+  try {
+    let raw: string | null = null;
+    if (typeof window !== "undefined") {
+      raw = localStorage.getItem(key);
+    } else {
+      raw = inMemoryReturnsCache[key] || null;
+    }
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveSalesReturns(returns: SalesReturnRecord[], tenantId?: string): void {
+  const key = getTenantReturnsStorageKey(tenantId);
+  const serialized = JSON.stringify(returns);
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(key, serialized);
+    } catch (e) {
+      console.error("Failed to save sales returns to localStorage:", e);
+    }
+  } else {
+    inMemoryReturnsCache[key] = serialized;
+  }
+}
+
+export function generateCreditNoteNumber(tenantId?: string): string {
+  const existing = getSalesReturns(tenantId);
+  const count = existing.length + 1;
+  const year = new Date().getFullYear();
+  return `CRN-${year}-${String(count).padStart(3, "0")}`;
+}
+
+export function processSalesReturn(
+  returnReq: {
+    originalInvoiceNumber: string;
+    returnedItems: SalesReturnItem[];
+    totalRefundAmount: number;
+    refundMethod: "Cash" | "UPI" | "Bank Transfer" | "Credit Note";
+    notes?: string;
+  },
+  operator: { id: string; fullName: string; role: any },
+  tenantId?: string
+): { returnRecord: SalesReturnRecord; updatedInvoice?: FinalizedInvoice } {
+  const invoices = getSavedInvoices(tenantId);
+  const origInvoice = invoices.find((inv) => inv.invoiceNumber === returnReq.originalInvoiceNumber);
+
+  const creditNoteNumber = generateCreditNoteNumber(tenantId);
+  const returnRecord: SalesReturnRecord = {
+    id: `return-${Date.now()}`,
+    creditNoteNumber,
+    originalInvoiceNumber: returnReq.originalInvoiceNumber,
+    originalInvoiceId: origInvoice?.id,
+    date: new Date().toISOString(),
+    customer: origInvoice?.customer || {
+      id: "walkin",
+      name: "Retail Customer",
+      phone: "+91 98290 00000",
+    },
+    returnedItems: returnReq.returnedItems,
+    totalRefundAmount: returnReq.totalRefundAmount,
+    refundMethod: returnReq.refundMethod,
+    creditNoteBalance: returnReq.refundMethod === "Credit Note" ? returnReq.totalRefundAmount : 0,
+    notes: returnReq.notes,
+    processedBy: operator.fullName,
+  };
+
+  // 1. Save Return Record
+  const existingReturns = getSalesReturns(tenantId);
+  saveSalesReturns([returnRecord, ...existingReturns], tenantId);
+
+  // 2. Restock items into inventory
+  let stock = getSavedStock(tenantId);
+  for (const retItem of returnReq.returnedItems) {
+    if (retItem.stockItemId) {
+      const targetStockItem = stock.find((s) => s.id === retItem.stockItemId);
+      if (targetStockItem) {
+        let nextStatus: any = "in_showcase";
+        let nextLocation = targetStockItem.trayLocation || "Showcase Tray #1";
+
+        if (retItem.restockDestination === "repair_vault") {
+          nextStatus = "in_repair";
+          nextLocation = "Repair Workshop Safe";
+        } else if (retItem.restockDestination === "melting_scrap") {
+          nextStatus = "in_vault";
+          nextLocation = "Vault Safe #Melting Box";
+        }
+
+        stock = stock.map((s) =>
+          s.id === retItem.stockItemId
+            ? { ...s, status: nextStatus, trayLocation: nextLocation }
+            : s
+        );
+
+        recordStockMovement(
+          {
+            stockItemId: targetStockItem.id,
+            sku: targetStockItem.sku,
+            productName: targetStockItem.name,
+            fromStatus: targetStockItem.status,
+            toStatus: nextStatus,
+            fromLocation: "Customer Sales Return",
+            toLocation: nextLocation,
+            reason: `Sales Return on Invoice #${returnReq.originalInvoiceNumber} (Credit Note ${creditNoteNumber})`,
+            performedById: operator.id,
+            performedByName: operator.fullName,
+            performedByRole: operator.role,
+          },
+          tenantId
+        );
+      }
+    }
+  }
+  saveStockItems(stock, tenantId);
+
+  // 3. Post double-entry reversal to Accounts
+  try {
+    const refundMode = returnReq.refundMethod;
+    const isCreditNote = refundMode === "Credit Note";
+    const creditAccount = isCreditNote
+      ? { code: "2050", name: "Customer Credit Notes Payable" }
+      : refundMode === "Bank Transfer"
+      ? { code: "1020", name: "Current Bank Account (HDFC/SBI)" }
+      : refundMode === "UPI"
+      ? { code: "1030", name: "UPI Digital Settlement Float" }
+      : { code: "1010", name: "Cash Drawer / Rokad (रोकड़)" };
+
+    recordJournalPosting(
+      {
+        referenceType: "POS_SALE",
+        referenceId: creditNoteNumber,
+        narration: `Sales Return & Refund for Invoice #${returnReq.originalInvoiceNumber} · Credit Note ${creditNoteNumber}`,
+        performedBy: operator.fullName,
+        lines: [
+          {
+            accountCode: "3010",
+            accountName: "Retail Sales Turnover",
+            debit: returnReq.totalRefundAmount,
+            credit: 0,
+          },
+          {
+            accountCode: creditAccount.code,
+            accountName: creditAccount.name,
+            debit: 0,
+            credit: returnReq.totalRefundAmount,
+          },
+        ],
+      },
+      tenantId
+    );
+  } catch (e) {
+    console.warn("Could not post sales return journal voucher to accounts:", e);
+  }
+
+  return { returnRecord, updatedInvoice: origInvoice };
+}
+
 
 

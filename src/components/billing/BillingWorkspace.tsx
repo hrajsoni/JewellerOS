@@ -12,6 +12,7 @@ import {
 import { formatINR, formatGrams } from "../../lib/formatters";
 import { GlassButton } from "../glass/GlassButton";
 import { GlassInput } from "../glass/GlassInput";
+import { SalesReturnModal } from "./SalesReturnModal";
 import {
   Receipt,
   Plus,
@@ -57,6 +58,7 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
   const [customerPhone, setCustomerPhone] = useState("+91 98290 12345");
   const [customerCity, setCustomerCity] = useState("Jaipur");
   const [customerGstin, setCustomerGstin] = useState("URP (Retail Consumer)");
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
 
   // Sync selected customer from directory
   React.useEffect(() => {
@@ -266,14 +268,24 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
             Multi-item billing, old-gold exchange credits, and print-ready GST invoices
           </p>
         </div>
-        <GlassButton
-          variant="secondary"
-          size="sm"
-          onClick={onNavigateToCalculator}
-          icon={<Plus size={14} />}
-        >
-          Add Item from Calculator
-        </GlassButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <GlassButton
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsReturnModalOpen(true)}
+            icon={<RotateCcw size={14} className="text-[#DFC488]" />}
+          >
+            Sales Return / Credit Note
+          </GlassButton>
+          <GlassButton
+            variant="secondary"
+            size="sm"
+            onClick={onNavigateToCalculator}
+            icon={<Plus size={14} />}
+          >
+            Add Item from Calculator
+          </GlassButton>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -724,6 +736,12 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Sales Return & Credit Note Modal */}
+      <SalesReturnModal
+        isOpen={isReturnModalOpen}
+        onClose={() => setIsReturnModalOpen(false)}
+      />
     </div>
   );
 };
