@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert";
 import { FinalizedInvoice } from "../../src/modules/invoicing/types";
 import { ShopExpense } from "../../src/modules/accounts/types";
+import { generateGstr1GovtJson } from "../../src/lib/gstr1JsonExporter";
 
 describe("JewelleryOS Milestone 8: Reports, GSTR-1 Tax Audit & Statutory Compliance Tests", () => {
   const mockInvoices: FinalizedInvoice[] = [
@@ -286,5 +287,33 @@ describe("JewelleryOS Milestone 8: Reports, GSTR-1 Tax Audit & Statutory Complia
     const netOperatingProfit = totalMakingEarned - totalExpenses;
     // 137888 - 7300 = 130588
     assert.strictEqual(netOperatingProfit, 130588);
+  });
+
+  test("GST Offline Tool Export (DEF-022): Generates valid HSN 7113 schema for GST Portal upload", () => {
+    const showroomGstin = "08AAAAJ1234F1Z8";
+    const payload = generateGstr1GovtJson(mockInvoices, showroomGstin, "08");
+
+    // 1. Verify Header Information
+    assert.strictEqual(payload.gstin, showroomGstin);
+    assert.ok(payload.fp.length === 6); // MMYYYY
+    assert.strictEqual(payload.version, "GST3.0.4");
+
+    // 2. Verify HSN 7113 Summary
+    assert.ok(payload.hsn.data.length >= 1);
+    const hsn7113 = payload.hsn.data[0];
+    assert.strictEqual(hsn7113.hsn_sc, "711319");
+    assert.strictEqual(hsn7113.uqc, "GMS");
+    assert.ok(hsn7113.qty > 0);
+    assert.ok(hsn7113.txval > 0);
+    assert.ok(hsn7113.camt > 0);
+    assert.ok(hsn7113.samt > 0);
+    assert.strictEqual(hsn7113.camt, hsn7113.samt); // Equal 1.5% split
+
+    // 3. Verify Document Outward Supply Register
+    assert.ok(payload.doc_issue.doc_det.length >= 1);
+    const docSummary = payload.doc_issue.doc_det[0].docs[0];
+    assert.strictEqual(docSummary.totnum, mockInvoices.length);
+    assert.strictEqual(docSummary.canc, 0);
+    assert.strictEqual(docSummary.net_issue, mockInvoices.length);
   });
 });

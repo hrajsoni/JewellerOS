@@ -7,6 +7,7 @@ import { ShopExpense } from "../../modules/accounts/types";
 import { PurchaseInvoice } from "../../modules/suppliers/types";
 import { Karigar, KarigarTransaction } from "../../modules/karigar/types";
 import { formatINR, formatGrams } from "../../lib/formatters";
+import { downloadGstr1JsonFile } from "../../lib/gstr1JsonExporter";
 import { GlassPanel } from "../glass/GlassPanel";
 import { GlassButton } from "../glass/GlassButton";
 import { GlassBadge } from "../glass/GlassBadge";
@@ -477,9 +478,19 @@ export const ReportsOverview: React.FC<ReportsOverviewProps> = ({
                   Standard HSN 7113: Articles of jewellery and parts thereof, of precious metal
                 </p>
               </div>
-              <GlassBadge variant="emerald" size="sm">
-                Ready for CA Upload
-              </GlassBadge>
+              <div className="flex flex-wrap items-center gap-2">
+                <GlassButton
+                  variant="primary"
+                  size="sm"
+                  onClick={() => downloadGstr1JsonFile(invoices, gstin || "08AAAAJ1234F1Z8")}
+                  icon={<FileSpreadsheet size={14} />}
+                >
+                  Export GST Portal JSON (GSTR-1)
+                </GlassButton>
+                <GlassBadge variant="emerald" size="sm">
+                  Ready for CA Upload
+                </GlassBadge>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
