@@ -8,11 +8,15 @@ import {
   BranchConfig,
   PaperSize,
   BackupDataSnapshot,
+  CloudBackupConfig,
+  CloudBackupProvider,
+  CloudBackupSchedule,
 } from "../../modules/settings/types";
 import {
   saveShowroomSettings,
   generateTenantBackupJSON,
   restoreTenantFromJSON,
+  triggerCloudBackupSync,
 } from "../../modules/settings/store";
 import { GlassPanel } from "../glass/GlassPanel";
 import { GlassButton } from "../glass/GlassButton";
@@ -38,6 +42,10 @@ import {
   Mail,
   Plus,
   Trash2,
+  Cloud,
+  RefreshCw,
+  Server,
+  Globe,
 } from "lucide-react";
 
 export type SettingsTab = "profile" | "invoice" | "barcode" | "branches" | "backup";
@@ -66,6 +74,24 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
     message: string;
     recordCounts?: Record<string, number>;
   } | null>(null);
+
+  // Cloud Disaster Recovery State
+  const [syncingCloud, setSyncingCloud] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    success: boolean;
+    message: string;
+    timestamp: string;
+  } | null>(null);
+
+  const defaultCloudBackup: CloudBackupConfig = {
+    enabled: false,
+    provider: "aws_s3",
+    schedule: "daily",
+    endpointUrl: "https://s3.ap-south-1.amazonaws.com/sarafa-backups/jaipur-main",
+    apiKey: "",
+    targetBucket: "sarafa-backups-jaipur",
+    lastSyncStatus: "IDLE",
+  };
 
   const handleSave = () => {
     const saved = saveShowroomSettings(settings, tenantId);
@@ -101,6 +127,35 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
         success: false,
         message: "Invalid JSON format: " + e.message,
       });
+    }
+  };
+
+  const handleTriggerCloudSync = async () => {
+    setSyncingCloud(true);
+    setSyncResult(null);
+    try {
+      const activeCloudConfig = settings.cloudBackup || defaultCloudBackup;
+      const res = await triggerCloudBackupSync(tenantId, activeCloudConfig);
+      setSyncResult(res);
+      if (res.success) {
+        setSettings((prev) => ({
+          ...prev,
+          cloudBackup: {
+            ...activeCloudConfig,
+            lastSyncAt: res.timestamp,
+            lastSyncStatus: "SUCCESS",
+            lastSyncMessage: res.message,
+          },
+        }));
+      }
+    } catch (err: any) {
+      setSyncResult({
+        success: false,
+        message: err?.message || "Cloud backup sync failed",
+        timestamp: new Date().toISOString(),
+      });
+    } finally {
+      setSyncingCloud(false);
     }
   };
 
@@ -661,6 +716,195 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
             >
               Verify & Restore Database
             </GlassButton>
+          </div>
+
+          {/* Automated Cloud Disaster Recovery & Sync Section */}
+          <div className="md:col-span-2 p-6 rounded-2xl bg-[var(--surface-primary)] border border-white/[0.06] space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-white/[0.06]">
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] flex items-center gap-1.5">
+                  <Cloud size={15} className="text-[#C5A059]" />
+                  Automated Cloud Disaster Recovery & Incremental Sync (DEF-023)
+                </span>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  Continuously replicates encrypted database snapshots to off-site cloud storage (AWS S3, Google Drive/GCS, or private Sarafa Webhook) for zero-loss recovery.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-[var(--text-secondary)]">Auto-Sync Status:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = settings.cloudBackup || defaultCloudBackup;
+                    setSettings({
+                      ...settings,
+                      cloudBackup: { ...current, enabled: !current.enabled },
+                    });
+                  }}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold tracking-wide transition-all ${
+                    settings.cloudBackup?.enabled
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : "bg-white/[0.05] text-[var(--text-tertiary)] border border-white/[0.1]"
+                  }`}
+                >
+                  {settings.cloudBackup?.enabled ? "● ENABLED" : "○ DISABLED"}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                  Cloud Storage Provider
+                </label>
+                <select
+                  value={settings.cloudBackup?.provider || "aws_s3"}
+                  onChange={(e) => {
+                    const current = settings.cloudBackup || defaultCloudBackup;
+                    setSettings({
+                      ...settings,
+                      cloudBackup: { ...current, provider: e.target.value as CloudBackupProvider },
+                    });
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-sans text-[var(--text-primary)] focus:outline-none focus:border-[#C5A059]"
+                >
+                  <option value="aws_s3">Amazon S3 Dedicated Bucket (ap-south-1)</option>
+                  <option value="google_drive">Google Cloud Storage / Drive Vault</option>
+                  <option value="custom_webhook">Sarafa Private Webhook Endpoint</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                  Automated Backup Schedule
+                </label>
+                <select
+                  value={settings.cloudBackup?.schedule || "daily"}
+                  onChange={(e) => {
+                    const current = settings.cloudBackup || defaultCloudBackup;
+                    setSettings({
+                      ...settings,
+                      cloudBackup: { ...current, schedule: e.target.value as CloudBackupSchedule },
+                    });
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-sans text-[var(--text-primary)] focus:outline-none focus:border-[#C5A059]"
+                >
+                  <option value="daily">Daily at Store Closing (23:59 IST)</option>
+                  <option value="hourly">Hourly Continuous Snapshot</option>
+                  <option value="weekly">Weekly Full Sarafa Archive</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                  Target Bucket / Folder Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. sarafa-backups-jaipur"
+                  value={settings.cloudBackup?.targetBucket || ""}
+                  onChange={(e) => {
+                    const current = settings.cloudBackup || defaultCloudBackup;
+                    setSettings({
+                      ...settings,
+                      cloudBackup: { ...current, targetBucket: e.target.value },
+                    });
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[#C5A059]"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                  Cloud Destination / Webhook URL
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://s3.ap-south-1.amazonaws.com/sarafa-backups or https://api.sarafa-cloud.com/v1/sync"
+                  value={settings.cloudBackup?.endpointUrl || ""}
+                  onChange={(e) => {
+                    const current = settings.cloudBackup || defaultCloudBackup;
+                    setSettings({
+                      ...settings,
+                      cloudBackup: { ...current, endpointUrl: e.target.value },
+                    });
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[#C5A059]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1.5">
+                  Vault Secret / API Key Token
+                </label>
+                <input
+                  type="password"
+                  placeholder="••••••••••••••••"
+                  value={settings.cloudBackup?.apiKey || ""}
+                  onChange={(e) => {
+                    const current = settings.cloudBackup || defaultCloudBackup;
+                    setSettings({
+                      ...settings,
+                      cloudBackup: { ...current, apiKey: e.target.value },
+                    });
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[#C5A059]"
+                />
+              </div>
+            </div>
+
+            {/* Cloud Sync Execution & Status Row */}
+            <div className="pt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-t border-white/[0.06]">
+              <div className="flex items-center gap-3">
+                <GlassBadge
+                  variant={
+                    settings.cloudBackup?.lastSyncStatus === "SUCCESS"
+                      ? "emerald"
+                      : settings.cloudBackup?.lastSyncStatus === "FAILED"
+                      ? "neutral"
+                      : "gold"
+                  }
+                  size="sm"
+                >
+                  {settings.cloudBackup?.lastSyncStatus || "IDLE"}
+                </GlassBadge>
+                <span className="text-[11px] text-[var(--text-tertiary)] font-mono">
+                  {settings.cloudBackup?.lastSyncAt
+                    ? `Last Sync: ${new Date(settings.cloudBackup.lastSyncAt).toLocaleString("en-IN")}`
+                    : "Never synced to cloud"}
+                </span>
+                {settings.cloudBackup?.lastSyncMessage && (
+                  <span className="text-[11px] text-[var(--text-secondary)] hidden lg:inline">
+                    · {settings.cloudBackup.lastSyncMessage}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <GlassButton
+                  variant="gold-outline"
+                  size="sm"
+                  onClick={handleTriggerCloudSync}
+                  disabled={syncingCloud}
+                  icon={<RefreshCw size={14} className={syncingCloud ? "animate-spin" : ""} />}
+                >
+                  {syncingCloud ? "Syncing to Cloud Vault..." : "Test & Sync Cloud Backup Now"}
+                </GlassButton>
+              </div>
+            </div>
+
+            {syncResult && (
+              <div
+                className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  syncResult.success
+                    ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+                    : "bg-red-500/10 border border-red-500/20 text-red-300"
+                }`}
+              >
+                {syncResult.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                <span>{syncResult.message}</span>
+              </div>
+            )}
           </div>
         </div>
       )}

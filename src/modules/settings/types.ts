@@ -52,6 +52,21 @@ export interface BranchConfig {
   activeStatus: boolean;
 }
 
+export type CloudBackupProvider = "aws_s3" | "google_drive" | "custom_webhook";
+export type CloudBackupSchedule = "hourly" | "daily" | "weekly";
+
+export interface CloudBackupConfig {
+  enabled: boolean;
+  provider: CloudBackupProvider;
+  schedule: CloudBackupSchedule;
+  endpointUrl: string;
+  apiKey?: string;
+  targetBucket?: string;
+  lastSyncAt?: string;
+  lastSyncStatus?: "IDLE" | "SUCCESS" | "FAILED" | "SYNCING";
+  lastSyncMessage?: string;
+}
+
 export interface ShowroomMasterSettings {
   tenantId: string;
   businessName: string;
@@ -71,6 +86,7 @@ export interface ShowroomMasterSettings {
   printConfig: InvoicePrintConfig;
   barcodeConfig: BarcodeLabelConfig;
   branches: BranchConfig[];
+  cloudBackup?: CloudBackupConfig;
   updatedAt: string;
 }
 
