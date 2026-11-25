@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { UserSession, RoleType, PermissionKey, LoginCredentials, UserProfile } from "./types";
 import {
   getCurrentSession,
@@ -8,7 +8,9 @@ import {
   switchActiveUser,
   loginWithCredentials,
   logoutUser,
-  DEFAULT_USERS,
+  getTenantUsers,
+  changeUserPin,
+  adminResetPin as storeAdminResetPin,
   DEFAULT_SESSION,
 } from "./store";
 import { hasPermission as checkPermission, ROLE_PERMISSIONS } from "./permissions";
@@ -20,6 +22,8 @@ export interface AuthContextType {
   switchUser: (userId: string) => void;
   login: (credentials: LoginCredentials) => { success: boolean; error?: string };
   logout: () => void;
+  updatePin: (currentPin: string, newPin: string) => { success: boolean; error?: string };
+  adminResetPin: (targetUserId: string, newPin: string) => { success: boolean; error?: string };
   isLoginModalOpen: boolean;
   openLoginModal: () => void;
   closeLoginModal: () => void;
@@ -29,27 +33,42 @@ export interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserSession>(DEFAULT_SESSION);
+  const [user, setUser] = useState<UserSession>(() => {
+    if (typeof window !== "undefined") {
+      return getCurrentSession();
+    }
+    return DEFAULT_SESSION;
+  });
+
+  const [allUsers, setAllUsers] = useState<(UserProfile & { pin: string })[]>(() =>
+    getTenantUsers(DEFAULT_SESSION.businessId)
+  );
+
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
-  const [isMounted, setIsMounted] = useState<boolean>(false);
 
   useEffect(() => {
-    setIsMounted(true);
     const session = getCurrentSession();
     setUser(session);
+    setAllUsers(getTenantUsers(session.businessId));
   }, []);
 
+  const refreshUsers = useCallback((tenantId?: string) => {
+    setAllUsers(getTenantUsers(tenantId || user.businessId));
+  }, [user.businessId]);
+
   const switchUser = (userId: string) => {
-    const nextSession = switchActiveUser(userId);
+    const nextSession = switchActiveUser(userId, user.businessId);
     if (nextSession) {
       setUser(nextSession);
+      refreshUsers(nextSession.businessId);
     }
   };
 
   const login = (credentials: LoginCredentials): { success: boolean; error?: string } => {
-    const result = loginWithCredentials(credentials);
+    const result = loginWithCredentials(credentials, user.businessId);
     if (result.session) {
       setUser(result.session);
+      refreshUsers(result.session.businessId);
       setIsLoginModalOpen(false);
       return { success: true };
     }
@@ -59,6 +78,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = () => {
     logoutUser();
     setUser(DEFAULT_SESSION);
+    refreshUsers(DEFAULT_SESSION.businessId);
+  };
+
+  const updatePin = (currentPin: string, newPin: string): { success: boolean; error?: string } => {
+    const result = changeUserPin(user.id, currentPin, newPin, user.businessId);
+    if (result.success) {
+      refreshUsers(user.businessId);
+    }
+    return result;
+  };
+
+  const adminResetPin = (targetUserId: string, newPin: string): { success: boolean; error?: string } => {
+    const result = storeAdminResetPin(user.role, targetUserId, newPin, user.businessId);
+    if (result.success) {
+      refreshUsers(user.businessId);
+    }
+    return result;
   };
 
   const hasPermission = (permission: PermissionKey): boolean => {
@@ -74,10 +110,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         switchUser,
         login,
         logout,
+        updatePin,
+        adminResetPin,
         isLoginModalOpen,
         openLoginModal: () => setIsLoginModalOpen(true),
         closeLoginModal: () => setIsLoginModalOpen(false),
-        allUsers: DEFAULT_USERS,
+        allUsers,
       }}
     >
       {children}

@@ -44,6 +44,8 @@ export interface UserProfile {
   advanceBalance: number;
   createdAt: string;
   lastLoginAt?: string;
+  pin?: string;
+  pinHash?: string;
 }
 
 export interface LoginCredentials {

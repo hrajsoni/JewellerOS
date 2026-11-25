@@ -257,8 +257,9 @@ export const LoginModal: React.FC = () => {
             <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.05] text-[11px] text-[var(--text-tertiary)] flex items-start gap-2">
               <Sparkles size={14} className="text-[#DFC488] shrink-0 mt-0.5" />
               <span>
-                Default demo PIN for all seed staff accounts is{" "}
-                <code className="text-[#DFC488] font-mono font-semibold">123456</code>.
+                Each staff account has a unique security PIN (e.g. Owner Harshit:{" "}
+                <code className="text-[#DFC488] font-mono font-semibold">884219</code>, Manager Sunil:{" "}
+                <code className="text-[#DFC488] font-mono font-semibold">451230</code>). Refer to Showroom Fast Role Switcher tab for profile details.
               </span>
             </div>
 
