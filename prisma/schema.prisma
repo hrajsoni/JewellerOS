@@ -53,6 +53,7 @@ model Business {
   staffMembers           StaffMember[]
   staffPayments          StaffPayment[]
   showroomMasterSettings ShowroomMasterSettings?
+  mediaAssets            MediaAsset[]
 
   @@map("businesses")
 }
@@ -218,24 +219,51 @@ enum MakingType {
 }
 
 model Product {
-  id             String      @id @default(cuid())
+  id             String           @id @default(cuid())
   businessId     String
-  name           String      @db.VarChar(150)
-  category       String      @db.VarChar(50) // Rings, Bangles, Chains, Utensils
+  productCode    String?          @db.VarChar(50) // Tier 2 Design Code
+  name           String           @db.VarChar(150)
+  category       String           @db.VarChar(50) // Rings, Bangles, Chains, Utensils
+  subCategory    String?          @db.VarChar(50)
   metal          MetalType
-  defaultPurity  String      @db.VarChar(10)
-  description    String?     @db.Text
-  hsnCode        String      @default("7113") @db.VarChar(10)
-  standardMaking Decimal?    @db.Decimal(8, 2)
-  makingType     MakingType  @default(PERCENTAGE)
-  imageUrl       String?     @db.Text
-  createdAt      DateTime    @default(now()) @db.Timestamptz
+  defaultPurity  String           @db.VarChar(10)
+  description    String?          @db.Text
+  hsnCode        String           @default("7113") @db.VarChar(10)
+  standardMaking Decimal?         @db.Decimal(8, 2)
+  makingType     MakingType       @default(PERCENTAGE)
+  imageUrl       String?          @db.Text
+  attributes     Json?
+  createdAt      DateTime         @default(now()) @db.Timestamptz
 
-  business       Business    @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  business       Business         @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  variants       ProductVariant[]
   stockItems     StockItem[]
+  mediaAssets    MediaAsset[]
 
   @@index([businessId, category])
+  @@index([businessId, productCode])
   @@map("products")
+}
+
+model ProductVariant {
+  id              String       @id @default(cuid())
+  productId       String
+  sku             String       @db.VarChar(50) // Tier 3 SKU
+  variantName     String       @db.VarChar(150)
+  referenceWeight Decimal?     @db.Decimal(10, 3)
+  masterBarcode   String?      @db.VarChar(50) // Non-serialized barcode
+  attributes      Json?
+  isSerialized    Boolean      @default(true)
+  createdAt       DateTime     @default(now()) @db.Timestamptz
+  updatedAt       DateTime     @updatedAt @db.Timestamptz
+
+  product         Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockItems      StockItem[]
+  barcodeTags     BarcodeTag[]
+
+  @@unique([productId, sku])
+  @@index([sku])
+  @@map("product_variants")
 }
 
 model StockItem {
@@ -243,6 +271,7 @@ model StockItem {
   businessId      String
   branchId        String?
   productId       String
+  variantId       String?
   barcode         String          @unique @db.VarChar(50)
   sku             String          @db.VarChar(50)
   title           String          @db.VarChar(150)
@@ -265,13 +294,111 @@ model StockItem {
   business        Business        @relation(fields: [businessId], references: [id], onDelete: Restrict)
   branch          Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
   product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   supplier        Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   movements       StockMovement[]
   invoiceItems    InvoiceItem[]
+  mediaAssets     MediaAsset[]
+  barcodeTags     BarcodeTag[]
 
   @@index([businessId, status])
   @@index([businessId, barcode])
+  @@index([businessId, variantId])
   @@map("stock_items")
+}
+
+enum MediaType {
+  DESIGN_RENDER
+  PIECE_PHOTO
+  HALLMARK_MACRO
+  CERTIFICATE
+  GENERAL_DOCUMENT
+}
+
+model MediaAsset {
+  id          String     @id @default(cuid())
+  businessId  String
+  productId   String?
+  stockItemId String?
+  mediaType   MediaType  @default(DESIGN_RENDER)
+  storageKey  String     @db.VarChar(500)
+  fileName    String     @db.VarChar(255)
+  mimeType    String     @db.VarChar(100)
+  fileSize    Int
+  width       Int?
+  height      Int?
+  thumbnails  Json?
+  isPrimary   Boolean    @default(false)
+  caption     String?    @db.VarChar(255)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now()) @db.Timestamptz
+
+  business    Business   @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  product     Product?   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockItem   StockItem? @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, mediaType])
+  @@index([productId, sortOrder])
+  @@index([stockItemId])
+  @@map("media_assets")
+}
+
+enum BarcodeTargetType {
+  STOCK_ITEM
+  PRODUCT_VARIANT
+}
+
+enum TagFormat {
+  BUTTERFLY_50x25
+  DUMBBELL_38x25
+  RECTANGLE_35x20
+}
+
+model BarcodeTag {
+  id          String            @id @default(cuid())
+  businessId  String
+  barcode     String            @db.VarChar(50)
+  targetType  BarcodeTargetType @default(STOCK_ITEM)
+  stockItemId String?
+  variantId   String?
+  symbology   String            @default("CODE_128") @db.VarChar(20)
+  tagFormat   TagFormat         @default(BUTTERFLY_50x25)
+  printCount  Int               @default(0)
+  lastPrinted DateTime?         @db.Timestamptz
+  createdAt   DateTime          @default(now()) @db.Timestamptz
+
+  stockItem   StockItem?        @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+  variant     ProductVariant?   @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, barcode])
+  @@map("barcode_tags")
+}
+
+enum SyncStatus {
+  QUEUED
+  SYNCING
+  SYNCED
+  CONFLICT
+  FAILED
+}
+
+model OfflineOutboxMutation {
+  id             String     @id @default(cuid())
+  businessId     String
+  deviceId       String     @db.VarChar(50)
+  idempotencyKey String     @unique @db.VarChar(100)
+  mutationType   String     @db.VarChar(50)
+  payload        Json
+  status         SyncStatus @default(QUEUED)
+  attempts       Int        @default(0)
+  lastError      String?    @db.Text
+  syncedAt       DateTime?  @db.Timestamptz
+  createdAt      DateTime   @default(now()) @db.Timestamptz
+  updatedAt      DateTime   @updatedAt @db.Timestamptz
+
+  @@index([businessId, status])
+  @@index([deviceId, createdAt])
+  @@map("offline_outbox_mutations")
 }
 
 model StockMovement {

@@ -43,6 +43,7 @@ import {
   InventoryManager,
   EditableStockFields,
 } from "../components/inventory/InventoryManager";
+import { CatalogueManager } from "../components/catalogue/CatalogueManager";
 import { StockItem } from "../modules/inventory/types";
 import {
   getSavedStock,
@@ -189,6 +190,9 @@ import { SettingsManager } from "../components/settings/SettingsManager";
 import { getSavedSettings } from "../modules/settings/store";
 import { ShowroomMasterSettings } from "../modules/settings/types";
 import { neonApi } from "../lib/neonApi";
+import { CommandPalette } from "../components/search/CommandPalette";
+import { calculateGoldPricing, calculateSilverPricing } from "../modules/pricing/engine";
+import { GoldPurityKey, SilverPurityKey } from "../modules/pricing/types";
 
 const RestrictedModuleGuard: React.FC<{
   moduleName: string;
@@ -1013,6 +1017,72 @@ function WorkspaceMain() {
     setInvoicingSubTab("active");
   };
 
+  const handleAddStockToPOS = (stockItem: StockItem) => {
+    if (draftItems.some((d) => d.stockItemId === stockItem.id)) {
+      setActiveTab("/invoices");
+      setInvoicingSubTab("active");
+      return;
+    }
+    const totalDed = (stockItem.stoneWeight || 0) + (stockItem.otherDeductions || 0);
+    const calc =
+      stockItem.metal === "silver"
+        ? calculateSilverPricing({
+            metal: "silver",
+            productName: stockItem.name,
+            grossWeight: stockItem.grossWeight,
+            stoneDeduction: totalDed,
+            purityKey: (["999", "925", "900", "800"].includes(String(stockItem.purity))
+              ? stockItem.purity
+              : "999") as SilverPurityKey,
+            silverRate,
+            rateUnit: "per_kg",
+            makingType: stockItem.defaultMakingType,
+            makingValue: stockItem.defaultMakingValue,
+          })
+        : calculateGoldPricing({
+            metal: "gold",
+            productName: stockItem.name,
+            grossWeight: stockItem.grossWeight,
+            stoneDeduction: totalDed,
+            purityKey: (["24K", "23K", "22K", "18K", "14K"].includes(String(stockItem.purity))
+              ? stockItem.purity
+              : "22K") as GoldPurityKey,
+            rate24kPer10g: goldRate,
+            makingType: stockItem.defaultMakingType,
+            makingValue: stockItem.defaultMakingValue,
+          });
+
+    const lineItem: InvoiceLineItem = {
+      id: `item-cmd-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      stockItemId: stockItem.id,
+      barcode: stockItem.barcode,
+      sku: stockItem.sku,
+      name: stockItem.name,
+      metal: stockItem.metal,
+      purity: stockItem.purity,
+      purityDisplay: `${stockItem.purity} (${stockItem.category})`,
+      grossWeight: stockItem.grossWeight,
+      stoneWeight: totalDed,
+      netWeight: calc.billableWeight.toNumber(),
+      metalRate: stockItem.metal === "gold" ? goldRate : silverRate,
+      effectiveRatePerGram: calc.effectiveRatePerGram.toNumber(),
+      metalValue: calc.metalValue.toNumber(),
+      makingType: stockItem.defaultMakingType,
+      makingRate: stockItem.defaultMakingValue,
+      makingCharges: calc.makingCharges.toNumber(),
+      stoneValue: 0,
+      discount: 0,
+      totalBeforeTax: calc.subtotalBeforeTax.toNumber(),
+      fineWeight: calc.fineWeight.toNumber(),
+      fineGoldValue24k: calc.fineGoldValue24k.toNumber(),
+      wastagePercentage: calc.wastagePercentage.toNumber(),
+    };
+
+    setDraftItems((prev) => [...prev, lineItem]);
+    setActiveTab("/invoices");
+    setInvoicingSubTab("active");
+  };
+
   const handleViewInvoice = (inv: FinalizedInvoice) => {
     setCurrentInvoiceData(inv);
     setIsInvoiceModalOpen(true);
@@ -1254,6 +1324,16 @@ function WorkspaceMain() {
                 shopName={activeTenant.businessName}
               />
             </div>
+          )}
+
+          {/* View: 5-Tier Product Catalogue */}
+          {activeTab === "/catalogue" && (
+            <CatalogueManager
+              shopName={activeTenant.businessName}
+              onSelectForBarcodePrint={() => {
+                setActiveTab("/inventory");
+              }}
+            />
           )}
 
           {/* View: Inventory Stock & Vault */}
@@ -1585,6 +1665,17 @@ function WorkspaceMain() {
           setSilverRate(record.silver999PerKg);
           runDbSync(neonApi.persistRates(activeTenant.id, record, user?.id));
         }}
+      />
+
+      {/* Global Command Palette (Ctrl+K / Cmd+K) */}
+      <CommandPalette
+        onNavigateTab={(href) => setActiveTab(href)}
+        onOpenRatesModal={() => setIsRatesModalOpen(true)}
+        onAddToPOS={handleAddStockToPOS}
+        onSelectCustomer={handleStartBillForCustomer}
+        stockItems={stockItems}
+        customers={customers}
+        activeTenantId={activeTenant.id}
       />
     </div>
   );

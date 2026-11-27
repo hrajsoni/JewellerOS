@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowUpRight, Store, ChevronDown, TrendingUp } from "lucide-react";
+import { ArrowUpRight, Store, ChevronDown, TrendingUp, Search } from "lucide-react";
 import { GlassButton } from "../glass/GlassButton";
 import { FastRoleSwitcher } from "../auth/FastRoleSwitcher";
 
@@ -10,6 +10,7 @@ export interface TopRateBarProps {
   onOpenGoldCalc?: () => void;
   onOpenSilverCalc?: () => void;
   onOpenRatesModal?: () => void;
+  onOpenCommandPalette?: () => void;
   activeTenantName?: string;
   activeTenantCity?: string;
   onOpenShowroomSwitcher?: () => void;
@@ -22,6 +23,7 @@ export const TopRateBar: React.FC<TopRateBarProps> = ({
   onOpenGoldCalc,
   onOpenSilverCalc,
   onOpenRatesModal,
+  onOpenCommandPalette,
   activeTenantName,
   activeTenantCity,
   onOpenShowroomSwitcher,
@@ -109,6 +111,23 @@ export const TopRateBar: React.FC<TopRateBarProps> = ({
 
         {/* Right Actions: RBAC Fast Role Switcher & New Invoice */}
         <div className="flex items-center gap-2.5 ml-auto sm:ml-0">
+          <button
+            onClick={() => {
+              if (onOpenCommandPalette) {
+                onOpenCommandPalette();
+              } else {
+                window.dispatchEvent(new CustomEvent("open-command-palette"));
+              }
+            }}
+            className="hidden sm:inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs text-zinc-300 transition-colors"
+            title="Open Command Palette (Ctrl+K / Cmd+K)"
+          >
+            <Search size={13} className="text-[#DFC488]" />
+            <span className="text-[11px] text-zinc-400">Search...</span>
+            <kbd className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/[0.06] text-zinc-400 border border-white/[0.06]">
+              Ctrl K
+            </kbd>
+          </button>
           <FastRoleSwitcher />
           <GlassButton
             variant="primary"
