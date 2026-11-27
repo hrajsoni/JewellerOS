@@ -36,12 +36,30 @@ import {
   Printer,
   History,
   X,
+  Pencil,
 } from "lucide-react";
 import { useAuth } from "../../modules/auth/AuthContext";
+
+export type EditableStockFields = Partial<
+  Pick<
+    StockItem,
+    | "name"
+    | "purity"
+    | "grossWeight"
+    | "stoneWeight"
+    | "otherDeductions"
+    | "defaultMakingType"
+    | "defaultMakingValue"
+    | "acquisitionCost"
+    | "trayLocation"
+    | "huid"
+  >
+>;
 
 export interface InventoryManagerProps {
   stockItems: StockItem[];
   onAddStockItem: (item: StockItem) => void;
+  onEditStockItem?: (stockItemId: string, updates: EditableStockFields) => void;
   onBulkImportStockItems?: (items: StockItem[]) => void;
   onUpdateStockItemStatus?: (
     stockItemId: string,
@@ -57,6 +75,7 @@ export interface InventoryManagerProps {
 export const InventoryManager: React.FC<InventoryManagerProps> = ({
   stockItems,
   onAddStockItem,
+  onEditStockItem,
   onBulkImportStockItems,
   onUpdateStockItemStatus,
   onLoadIntoCalculator,
@@ -84,6 +103,51 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [activeMovementItem, setActiveMovementItem] = useState<StockItem | null>(null);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [movements, setMovements] = useState<StockMovementRecord[]>([]);
+
+  // Edit Ornament Modal State
+  const [editTarget, setEditTarget] = useState<StockItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPurity, setEditPurity] = useState("");
+  const [editGross, setEditGross] = useState("");
+  const [editStone, setEditStone] = useState("");
+  const [editOtherDed, setEditOtherDed] = useState("");
+  const [editMakingType, setEditMakingType] = useState<"percentage" | "per_gram" | "fixed">("percentage");
+  const [editMakingVal, setEditMakingVal] = useState("");
+  const [editCost, setEditCost] = useState("");
+  const [editTray, setEditTray] = useState("");
+  const [editHuid, setEditHuid] = useState("");
+
+  const handleOpenEdit = (item: StockItem) => {
+    setEditTarget(item);
+    setEditName(item.name);
+    setEditPurity(String(item.purity));
+    setEditGross(String(item.grossWeight));
+    setEditStone(String(item.stoneWeight || 0));
+    setEditOtherDed(String(item.otherDeductions || 0));
+    setEditMakingType(item.defaultMakingType || "percentage");
+    setEditMakingVal(String(item.defaultMakingValue || 0));
+    setEditCost(String(item.acquisitionCost || 0));
+    setEditTray(item.trayLocation || "");
+    setEditHuid(item.huid || "");
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTarget || !onEditStockItem) return;
+    onEditStockItem(editTarget.id, {
+      name: editName.trim() || editTarget.name,
+      purity: (editPurity.trim() || editTarget.purity) as StockItem["purity"],
+      grossWeight: parseFloat(editGross) || editTarget.grossWeight,
+      stoneWeight: parseFloat(editStone) || 0,
+      otherDeductions: parseFloat(editOtherDed) || 0,
+      defaultMakingType: editMakingType,
+      defaultMakingValue: parseFloat(editMakingVal) || 0,
+      acquisitionCost: canViewCosts ? parseFloat(editCost) || 0 : editTarget.acquisitionCost,
+      trayLocation: editTray.trim() || editTarget.trayLocation,
+      huid: editHuid.trim() || undefined,
+    });
+    setEditTarget(null);
+  };
 
   useEffect(() => {
     setMovements(getStockMovements());
@@ -573,6 +637,16 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                         >
                           <ArrowRightLeft size={12} />
                         </button>
+
+                        {onEditStockItem && (
+                          <button
+                            onClick={() => handleOpenEdit(item)}
+                            className="inline-flex items-center gap-1 p-1 rounded bg-white/[0.04] text-[var(--text-secondary)] border border-white/[0.08] hover:bg-[#C5A059]/20 hover:text-[#DFC488] transition-all text-[11px]"
+                            title="Edit Purity, Weights, Making or HUID"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -780,6 +854,125 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
           }
         }}
       />
+
+      {/* Edit Stock Item Modal */}
+      {editTarget && (
+        <GlassDialog
+          isOpen={!!editTarget}
+          onClose={() => setEditTarget(null)}
+          title={`Edit Stock Piece · ${editTarget.sku}`}
+          description={`Barcode: ${editTarget.barcode} · Net & fine weights automatically recalculate upon save.`}
+          maxWidth="lg"
+        >
+          <form onSubmit={handleEditSubmit} className="space-y-4 pt-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <GlassInput
+                label="Ornament Name *"
+                required
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+              <GlassInput
+                label="Purity (e.g. 22K, 18K, 999)"
+                required
+                value={editPurity}
+                onChange={(e) => setEditPurity(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <GlassInput
+                label="Gross Weight (g) *"
+                type="number"
+                step="0.001"
+                suffixSymbol="g"
+                required
+                value={editGross}
+                onChange={(e) => setEditGross(e.target.value)}
+              />
+              <GlassInput
+                label="Stone Deduction (g)"
+                type="number"
+                step="0.001"
+                suffixSymbol="g"
+                value={editStone}
+                onChange={(e) => setEditStone(e.target.value)}
+              />
+              <GlassInput
+                label="Other (Lac/Wax g)"
+                type="number"
+                step="0.001"
+                suffixSymbol="g"
+                value={editOtherDed}
+                onChange={(e) => setEditOtherDed(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="text-[11px] font-medium text-[var(--text-secondary)] mb-1.5 block">
+                  Making Charge Type
+                </label>
+                <select
+                  value={editMakingType}
+                  onChange={(e) =>
+                    setEditMakingType(e.target.value as "percentage" | "per_gram" | "fixed")
+                  }
+                  className="w-full rounded-lg px-3 py-2 text-xs bg-black/40 border border-white/[0.08] text-[var(--text-primary)]"
+                >
+                  <option value="percentage">% on Metal Value</option>
+                  <option value="per_gram">₹ / gram</option>
+                  <option value="fixed">Flat ₹</option>
+                </select>
+              </div>
+              <GlassInput
+                label="Making Value"
+                type="number"
+                step="0.01"
+                value={editMakingVal}
+                onChange={(e) => setEditMakingVal(e.target.value)}
+              />
+              <GlassInput
+                label="BIS HUID (6-char)"
+                placeholder="e.g. A8K9M2"
+                value={editHuid}
+                onChange={(e) => setEditHuid(e.target.value.toUpperCase())}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <GlassInput
+                label="Display Location / Tray"
+                value={editTray}
+                onChange={(e) => setEditTray(e.target.value)}
+              />
+              {canViewCosts && (
+                <GlassInput
+                  label="Acquisition Cost (₹)"
+                  type="number"
+                  prefixSymbol="₹"
+                  value={editCost}
+                  onChange={(e) => setEditCost(e.target.value)}
+                />
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-white/[0.06]">
+              <GlassButton
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setEditTarget(null)}
+              >
+                Cancel
+              </GlassButton>
+              <GlassButton type="submit" variant="primary" size="sm">
+                Save Changes to Inventory
+              </GlassButton>
+            </div>
+          </form>
+        </GlassDialog>
+      )}
     </div>
   );
 };

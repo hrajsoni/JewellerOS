@@ -362,6 +362,77 @@ export function updateStockItemStatus(
   return { updatedItems, movement };
 }
 
+export function updateStockItemDetails(
+  stockItemId: string,
+  updates: Partial<
+    Pick<
+      StockItem,
+      | "name"
+      | "category"
+      | "purity"
+      | "grossWeight"
+      | "stoneWeight"
+      | "otherDeductions"
+      | "defaultMakingType"
+      | "defaultMakingValue"
+      | "acquisitionCost"
+      | "trayLocation"
+      | "huid"
+    >
+  >,
+  tenantId?: string
+): { updatedItems: StockItem[]; updatedItem: StockItem } | null {
+  const items = getSavedStock(tenantId);
+  const existing = items.find((i) => i.id === stockItemId);
+  if (!existing) return null;
+
+  const grossWeight =
+    updates.grossWeight !== undefined ? Number(updates.grossWeight) : existing.grossWeight;
+  const stoneWeight =
+    updates.stoneWeight !== undefined ? Number(updates.stoneWeight) : existing.stoneWeight;
+  const otherDeductions =
+    updates.otherDeductions !== undefined
+      ? Number(updates.otherDeductions)
+      : existing.otherDeductions || 0;
+  const netWeight = Math.max(
+    0.001,
+    Math.round((grossWeight - stoneWeight - otherDeductions) * 1000) / 1000
+  );
+  const purity = updates.purity ?? existing.purity;
+  const purityFactor =
+    purity === "24K"
+      ? 1
+      : purity === "23K"
+      ? 23 / 24
+      : purity === "22K"
+      ? 22 / 24
+      : purity === "18K"
+      ? 18 / 24
+      : purity === "14K"
+      ? 14 / 24
+      : purity === "999"
+      ? 0.999
+      : purity === "925"
+      ? 0.925
+      : 1;
+  const fineWeight = Math.round(netWeight * purityFactor * 1000) / 1000;
+
+  const updatedItem: StockItem = {
+    ...existing,
+    ...updates,
+    grossWeight,
+    stoneWeight,
+    otherDeductions,
+    netWeight,
+    fineWeight,
+    purity,
+  };
+
+  const updatedItems = items.map((i) => (i.id === stockItemId ? updatedItem : i));
+  saveStockItems(updatedItems, tenantId);
+  return { updatedItems, updatedItem };
+}
+
 export function generateBarcodeForIndex(index: number): string {
   const base = 8900000000;
   return (base + index).toString();

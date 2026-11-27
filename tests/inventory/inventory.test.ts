@@ -4,6 +4,7 @@ import {
   generateBarcodeForIndex,
   generateSkuForCategory,
   updateStockItemStatus,
+  updateStockItemDetails,
   recordStockMovement,
   INITIAL_STOCK_ITEMS,
   startStockAudit,
@@ -138,5 +139,31 @@ describe("JewelleryOS Inventory, Barcode & Stock Movement Tests", () => {
     const updatedStock = getStockItems(tenantId);
     const unscannedItem = updatedStock.find((i) => i.barcode === "8902240002");
     assert.strictEqual(unscannedItem?.status, "damaged");
+  });
+
+  test("Stock Editing: Recalculates netWeight and fineWeight accurately on detail update", () => {
+    const tenantId = "tenant-stock-edit-test";
+    saveStockItems(INITIAL_STOCK_ITEMS, tenantId);
+    const target = getStockItems(tenantId)[0];
+
+    const res = updateStockItemDetails(
+      target.id,
+      {
+        name: "Edited 22K Wedding Ring",
+        purity: "22K",
+        grossWeight: 12.5,
+        stoneWeight: 0.5,
+        otherDeductions: 0,
+        huid: "H99K12",
+      },
+      tenantId
+    );
+
+    assert.ok(res);
+    assert.strictEqual(res.updatedItem.name, "Edited 22K Wedding Ring");
+    assert.strictEqual(res.updatedItem.netWeight, 12.0);
+    // 12.0 * (22/24) = 11.000
+    assert.strictEqual(res.updatedItem.fineWeight, 11.0);
+    assert.strictEqual(res.updatedItem.huid, "H99K12");
   });
 });

@@ -153,7 +153,25 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { stockItemId, barcode, status, trayLocation, reason = "Status updated" } = body;
+    const {
+      stockItemId,
+      barcode,
+      action,
+      status,
+      trayLocation,
+      reason = "Status updated",
+      title,
+      purityKey,
+      grossWeight,
+      stoneWeight,
+      otherDeductions,
+      netWeight,
+      fineGoldEq,
+      makingType,
+      makingValue,
+      acquisitionCost,
+      huid,
+    } = body;
 
     if (!stockItemId && !barcode) {
       return NextResponse.json({ error: "stockItemId or barcode required" }, { status: 400 });
@@ -165,6 +183,40 @@ export async function PATCH(request: Request) {
 
     if (!existing) {
       return NextResponse.json({ error: "Stock item not found" }, { status: 404 });
+    }
+
+    if (action === "edit_item") {
+      const normalizedMaking = makingType
+        ? String(makingType).toLowerCase() === "per_gram"
+          ? "PER_GRAM"
+          : String(makingType).toLowerCase() === "fixed"
+          ? "FIXED"
+          : "PERCENTAGE"
+        : existing.makingType;
+
+      const updatedItem = await prisma.stockItem.update({
+        where: { id: existing.id },
+        data: {
+          ...(title ? { title: String(title) } : {}),
+          ...(purityKey ? { purityKey: String(purityKey) } : {}),
+          ...(grossWeight !== undefined ? { grossWeight: new Prisma.Decimal(grossWeight) } : {}),
+          ...(stoneWeight !== undefined ? { stoneWeight: new Prisma.Decimal(stoneWeight) } : {}),
+          ...(otherDeductions !== undefined
+            ? { otherDeductions: new Prisma.Decimal(otherDeductions) }
+            : {}),
+          ...(netWeight !== undefined ? { netWeight: new Prisma.Decimal(netWeight) } : {}),
+          ...(fineGoldEq !== undefined ? { fineGoldEq: new Prisma.Decimal(fineGoldEq) } : {}),
+          makingType: normalizedMaking as any,
+          ...(makingValue !== undefined ? { makingValue: new Prisma.Decimal(makingValue) } : {}),
+          ...(acquisitionCost !== undefined
+            ? { acquisitionCost: new Prisma.Decimal(acquisitionCost) }
+            : {}),
+          ...(trayLocation ? { trayLocation: String(trayLocation) } : {}),
+          ...(huid !== undefined ? { huid: huid ? String(huid) : null } : {}),
+        },
+      });
+
+      return NextResponse.json({ success: true, item: updatedItem });
     }
 
     const targetStatus = String(status || "IN_SHOWCASE").toUpperCase();
@@ -196,7 +248,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ success: true, item: updated });
   } catch (error) {
     return NextResponse.json(
-      { error: "Failed to update stock status.", details: String(error) },
+      { error: "Failed to update stock item.", details: String(error) },
       { status: 500 }
     );
   }

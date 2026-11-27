@@ -36,6 +36,14 @@ export interface CustomerLedgerProps {
   onAddCustomer: (input: NewCustomerInput) => void;
   onStartBillForCustomer: (customer: Customer) => void;
   onViewInvoice: (invoice: FinalizedInvoice) => void;
+  shopName?: string;
+  onSettleBalance?: (
+    customerId: string,
+    amount: number,
+    entryType: "collect_udhar" | "record_advance" | "add_udhar",
+    method: "Cash" | "UPI" | "Card" | "Bank Transfer",
+    notes?: string
+  ) => void;
 }
 
 export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
@@ -44,11 +52,51 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
   onAddCustomer,
   onStartBillForCustomer,
   onViewInvoice,
+  shopName = "Sandhya Jewellers",
+  onSettleBalance,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [tierFilter, setTierFilter] = useState<"all" | CustomerType>("all");
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const selectedCustomer = selectedCustomerId
+    ? customers.find((c) => c.id === selectedCustomerId) ?? null
+    : null;
+  const setSelectedCustomer = (c: Customer | null) => setSelectedCustomerId(c?.id ?? null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // Udhar / Advance Settlement CR/DR Modal State
+  const [settleTarget, setSettleTarget] = useState<Customer | null>(null);
+  const [settleType, setSettleType] = useState<"collect_udhar" | "record_advance" | "add_udhar">(
+    "collect_udhar"
+  );
+  const [settleAmount, setSettleAmount] = useState("");
+  const [settleMethod, setSettleMethod] = useState<"Cash" | "UPI" | "Card" | "Bank Transfer">(
+    "Cash"
+  );
+  const [settleNotes, setSettleNotes] = useState("");
+
+  const handleOpenSettleModal = (c: Customer) => {
+    setSettleTarget(c);
+    if (c.outstandingCredit < 0) {
+      setSettleType("collect_udhar");
+      setSettleAmount(String(Math.abs(c.outstandingCredit)));
+    } else {
+      setSettleType("record_advance");
+      setSettleAmount("");
+    }
+    setSettleMethod("Cash");
+    setSettleNotes("");
+  };
+
+  const handleSettleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(settleAmount);
+    if (!settleTarget || !onSettleBalance || isNaN(amt) || amt <= 0) return;
+    onSettleBalance(settleTarget.id, amt, settleType, settleMethod, settleNotes.trim() || undefined);
+    setSettleTarget(null);
+    setSettleAmount("");
+    setSettleNotes("");
+  };
 
   // New Customer Form State
   const [newName, setNewName] = useState("");
@@ -65,7 +113,7 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
   const handleShareCustomerStatement = (c: Customer) => {
     const cleanPhone = c.phone.replace(/[^0-9]/g, "");
     const msg =
-      `*CUSTOMER ACCOUNT STATEMENT · SANDHYA JEWELLERS*\n` +
+      `*CUSTOMER ACCOUNT STATEMENT · ${shopName.toUpperCase()}*\n` +
       `Customer: *${c.name}* (${c.phone})\n` +
       `City: ${c.city}\n` +
       `--------------------------------\n` +
@@ -77,7 +125,7 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
         ? `*Pending Due (उधार): ${formatINR(Math.abs(c.outstandingCredit))}*\n`
         : `*Balance: Nil (All settled)*\n`) +
       `--------------------------------\n` +
-      `Thank you for trusting Sandhya Jewellers!`;
+      `Thank you for trusting ${shopName}!`;
 
     const target = cleanPhone.length === 10 ? "91" + cleanPhone : cleanPhone || "";
     const url = target
@@ -363,9 +411,19 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
                       )}
                     </td>
 
-                    {/* Lifetime Spend */}
+                    {/* Lifetime Spend & Udhar/Advance Status */}
                     <td className="py-3.5 px-4 text-right font-bold text-[var(--text-primary)] font-mono text-sm">
-                      {formatINR(c.totalPurchases)}
+                      <div>{formatINR(c.totalPurchases)}</div>
+                      {c.outstandingCredit < 0 && (
+                        <div className="text-[10px] font-medium text-amber-400">
+                          Udhar Due: {formatINR(Math.abs(c.outstandingCredit))}
+                        </div>
+                      )}
+                      {c.outstandingCredit > 0 && (
+                        <div className="text-[10px] font-medium text-emerald-400">
+                          Advance Cr: {formatINR(c.outstandingCredit)}
+                        </div>
+                      )}
                     </td>
 
                     {/* Bills count */}
@@ -384,6 +442,16 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
                         >
                           View Ledger
                         </button>
+                        {onSettleBalance && (
+                          <button
+                            onClick={() => handleOpenSettleModal(c)}
+                            title="Collect Udhar or Record Customer Advance (CR/DR)"
+                            className="px-2.5 py-1 text-xs font-medium rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors inline-flex items-center gap-1"
+                          >
+                            <CreditCard size={12} />
+                            CR/DR
+                          </button>
+                        )}
                         <button
                           onClick={() => onStartBillForCustomer(c)}
                           title="Generate bill for this customer"
@@ -490,7 +558,17 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
                   <History size={14} className="text-[#C5A059]" />
                   Past Finalized Invoices ({customerInvoices.length})
                 </h4>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {onSettleBalance && (
+                    <GlassButton
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleOpenSettleModal(selectedCustomer)}
+                      icon={<CreditCard size={13} className="text-emerald-400" />}
+                    >
+                      Settle Udhar / Advance
+                    </GlassButton>
+                  )}
                   <GlassButton
                     variant="ghost"
                     size="sm"
@@ -689,6 +767,110 @@ export const CustomerLedger: React.FC<CustomerLedgerProps> = ({
               </GlassButton>
               <GlassButton variant="primary" size="sm" type="submit">
                 Save Customer Profile
+              </GlassButton>
+            </div>
+          </form>
+        </GlassDialog>
+      )}
+
+      {/* Udhar Collection & Advance Settlement CR/DR Modal */}
+      {settleTarget && (
+        <GlassDialog
+          isOpen={!!settleTarget}
+          onClose={() => setSettleTarget(null)}
+          title={`Customer CR/DR Ledger · ${settleTarget.name}`}
+          description="Collect pending Udhar dues, accept advance deposit, or post a credit debit entry synced to Accounts & Neon."
+          maxWidth="md"
+        >
+          <form onSubmit={handleSettleSubmit} className="space-y-4 text-xs">
+            <div className="p-3 rounded-lg bg-black/40 border border-white/[0.06] flex items-center justify-between">
+              <span className="text-[var(--text-secondary)]">Current Ledger Balance</span>
+              <span
+                className={`font-mono font-bold ${
+                  settleTarget.outstandingCredit < 0
+                    ? "text-amber-400"
+                    : settleTarget.outstandingCredit > 0
+                    ? "text-emerald-400"
+                    : "text-[var(--text-primary)]"
+                }`}
+              >
+                {settleTarget.outstandingCredit < 0
+                  ? `Pending Udhar: ${formatINR(Math.abs(settleTarget.outstandingCredit))}`
+                  : settleTarget.outstandingCredit > 0
+                  ? `Store Credit / Advance: ${formatINR(settleTarget.outstandingCredit)}`
+                  : "Nil (All Settled)"}
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-[var(--text-secondary)] block">
+                Transaction Type (CR / DR)
+              </label>
+              <select
+                value={settleType}
+                onChange={(e) =>
+                  setSettleType(
+                    e.target.value as "collect_udhar" | "record_advance" | "add_udhar"
+                  )
+                }
+                className="w-full px-3 py-2 text-xs rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)] focus:outline-none focus:border-[#C5A059]"
+              >
+                <option value="collect_udhar">CR · Collect Udhar Payment (Reduce Due)</option>
+                <option value="record_advance">CR · Accept Advance / Bayana Deposit</option>
+                <option value="add_udhar">DR · Add Manual Udhar / Balance Debit</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <GlassInput
+                label="Amount (₹) *"
+                type="number"
+                step="0.01"
+                min="1"
+                prefixSymbol="₹"
+                required
+                value={settleAmount}
+                onChange={(e) => setSettleAmount(e.target.value)}
+              />
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-[var(--text-secondary)] block">
+                  Payment Mode
+                </label>
+                <select
+                  value={settleMethod}
+                  onChange={(e) =>
+                    setSettleMethod(
+                      e.target.value as "Cash" | "UPI" | "Card" | "Bank Transfer"
+                    )
+                  }
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)] focus:outline-none focus:border-[#C5A059]"
+                >
+                  <option value="Cash">Cash Drawer (1010)</option>
+                  <option value="UPI">UPI / PhonePe / GPay (1030)</option>
+                  <option value="Card">Card Swipe POS (1020)</option>
+                  <option value="Bank Transfer">NEFT / RTGS / Bank (1020)</option>
+                </select>
+              </div>
+            </div>
+
+            <GlassInput
+              label="Voucher / Reference Notes"
+              placeholder="e.g. Receipt #412 via GPay"
+              value={settleNotes}
+              onChange={(e) => setSettleNotes(e.target.value)}
+            />
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/[0.06]">
+              <GlassButton
+                variant="ghost"
+                size="sm"
+                type="button"
+                onClick={() => setSettleTarget(null)}
+              >
+                Cancel
+              </GlassButton>
+              <GlassButton variant="primary" size="sm" type="submit">
+                Post CR/DR Entry
               </GlassButton>
             </div>
           </form>

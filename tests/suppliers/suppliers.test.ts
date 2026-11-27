@@ -11,6 +11,12 @@ import {
 import { PurchaseInvoice, PurchaseItemInput } from "../../src/modules/suppliers/types";
 import { ROLE_PERMISSIONS } from "../../src/modules/auth/permissions";
 import { Customer } from "../../src/modules/customers/types";
+import {
+  INITIAL_CUSTOMERS,
+  saveCustomers,
+  recordCustomerBalanceEntry,
+} from "../../src/modules/customers/store";
+import { getSavedAccounts } from "../../src/modules/accounts/store";
 
 describe("JewelleryOS Milestone 5: Purchases, Suppliers & Customer Dues Tests", () => {
   const mockUser = {
@@ -152,5 +158,49 @@ describe("JewelleryOS Milestone 5: Purchases, Suppliers & Customer Dues Tests", 
       true,
       "Accountant must have access to purchase costs for ledger reconciliation"
     );
+  });
+
+  test("Customer Udhar CR/DR Settlement: Updates customer due and posts double-entry Cash & Receivable accounts", () => {
+    const tenantId = "tenant-cust-crdr-test";
+    const seeded: Customer = {
+      ...INITIAL_CUSTOMERS[0],
+      id: "cust-crdr-1",
+      outstandingCredit: -10000, // ₹10,000 pending Udhar
+    };
+    saveCustomers([seeded], tenantId);
+
+    const beforeCash = getSavedAccounts(tenantId).find((a) => a.code === "1010")!.balance;
+    const beforeRec = getSavedAccounts(tenantId).find((a) => a.code === "1050")!.balance;
+
+    // Collect ₹6,000 Cash Udhar
+    const res1 = recordCustomerBalanceEntry(
+      "cust-crdr-1",
+      6000,
+      "collect_udhar",
+      "Cash",
+      "Partial collection",
+      tenantId,
+      "Harshit Raj"
+    );
+    assert.ok(res1);
+    assert.strictEqual(res1.updatedCustomer.outstandingCredit, -4000);
+
+    const afterCash = getSavedAccounts(tenantId).find((a) => a.code === "1010")!.balance;
+    const afterRec = getSavedAccounts(tenantId).find((a) => a.code === "1050")!.balance;
+    assert.strictEqual(afterCash, beforeCash + 6000);
+    assert.strictEqual(afterRec, beforeRec - 6000);
+
+    // Record ₹5,000 UPI advance -> shifts from -4000 to +1000 Advance Credit
+    const res2 = recordCustomerBalanceEntry(
+      "cust-crdr-1",
+      5000,
+      "record_advance",
+      "UPI",
+      "Wedding booking advance",
+      tenantId,
+      "Harshit Raj"
+    );
+    assert.ok(res2);
+    assert.strictEqual(res2.updatedCustomer.outstandingCredit, 1000);
   });
 });

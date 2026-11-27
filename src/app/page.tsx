@@ -31,6 +31,7 @@ import {
   FinalizedInvoice,
   CustomerProfile,
   OldGoldExchangeItem,
+  SalesReturnRecord,
 } from "../modules/invoicing/types";
 import {
   getSavedInvoices,
@@ -38,12 +39,16 @@ import {
   INITIAL_DRAFT,
 } from "../modules/invoicing/store";
 import { formatINR } from "../lib/formatters";
-import { InventoryManager } from "../components/inventory/InventoryManager";
+import {
+  InventoryManager,
+  EditableStockFields,
+} from "../components/inventory/InventoryManager";
 import { StockItem } from "../modules/inventory/types";
 import {
   getSavedStock,
   saveStockItems,
   updateStockItemStatus,
+  updateStockItemDetails,
   lockInvoicedStockItems,
   ingestOldGoldScrap,
 } from "../modules/inventory/store";
@@ -54,6 +59,7 @@ import {
   saveCustomers,
   addCustomer,
   recordInvoiceToCustomer,
+  recordCustomerBalanceEntry,
 } from "../modules/customers/store";
 import { ReportsOverview } from "../components/reports/ReportsOverview";
 import { PreloadedCalcData } from "../components/calculator/CounterCalculator";
@@ -701,6 +707,53 @@ function WorkspaceMain() {
     );
   };
 
+  const handleSettleCustomerBalance = (
+    customerId: string,
+    amount: number,
+    entryType: "collect_udhar" | "record_advance" | "add_udhar",
+    method: "Cash" | "UPI" | "Card" | "Bank Transfer",
+    notes?: string
+  ) => {
+    const res = recordCustomerBalanceEntry(
+      customerId,
+      amount,
+      entryType,
+      method,
+      notes,
+      activeTenant.id,
+      user?.fullName
+    );
+    if (res) {
+      setCustomers(res.updatedCustomers);
+      setAccounts(getSavedAccounts(activeTenant.id));
+      runDbSync(
+        neonApi.settleCustomerBalance(activeTenant.id, {
+          customerId,
+          customerPhone: res.updatedCustomer.phone,
+          customerName: res.updatedCustomer.name,
+          paymentAmount: amount,
+          entryType,
+          method,
+        })
+      );
+    }
+  };
+
+  const handleEditStockItem = (stockItemId: string, updates: EditableStockFields) => {
+    const res = updateStockItemDetails(stockItemId, updates, activeTenant.id);
+    if (res) {
+      setStockItems(res.updatedItems);
+      runDbSync(neonApi.updateStockItem(res.updatedItem));
+    }
+  };
+
+  const handleSalesReturnProcessed = (record: SalesReturnRecord) => {
+    setStockItems(getSavedStock(activeTenant.id));
+    setInvoices(getSavedInvoices(activeTenant.id));
+    setAccounts(getSavedAccounts(activeTenant.id));
+    runDbSync(neonApi.processSalesReturn(activeTenant.id, record));
+  };
+
   const handleAddGirviLoan = (input: NewGirviInput) => {
     const created = createGirviLoan(input, activeTenant.id);
     setGirviLoans(getSavedGirviLoans(activeTenant.id));
@@ -1140,6 +1193,10 @@ function WorkspaceMain() {
                   onNavigateToCalculator={() => setActiveTab("/calculator")}
                   onFinalizeInvoice={handleFinalizeBill}
                   gold24kRate={goldRate}
+                  silverRate={silverRate}
+                  stockItems={stockItems}
+                  onAddScannedItem={(item) => setDraftItems((prev) => [...prev, item])}
+                  onReturnProcessed={handleSalesReturnProcessed}
                   shopDetails={shopDetails}
                   selectedCustomer={selectedBillingCustomer}
                 />
@@ -1204,6 +1261,7 @@ function WorkspaceMain() {
             <InventoryManager
               stockItems={stockItems}
               onAddStockItem={handleAddStockItem}
+              onEditStockItem={handleEditStockItem}
               onBulkImportStockItems={(newItems) => {
                 const updated = [...newItems, ...stockItems];
                 setStockItems(updated);
@@ -1295,6 +1353,8 @@ function WorkspaceMain() {
               onAddCustomer={handleAddCustomer}
               onStartBillForCustomer={handleStartBillForCustomer}
               onViewInvoice={handleViewInvoice}
+              shopName={activeTenant.businessName}
+              onSettleBalance={handleSettleCustomerBalance}
             />
           )}
 
@@ -1346,6 +1406,11 @@ function WorkspaceMain() {
                 accounts={accounts}
                 expenses={expenses}
                 dailyClosings={dailyClosings}
+                invoices={invoices}
+                supplierPayments={supplierPayments}
+                girviLoans={girviLoans}
+                karigarTxns={karigarTxns}
+                staffPayments={staffPayments}
                 onRecordExpense={handleRecordExpense}
                 onRecordClosing={handleRecordClosing}
                 shopName={activeTenant.businessName}

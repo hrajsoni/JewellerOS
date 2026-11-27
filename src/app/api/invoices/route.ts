@@ -240,3 +240,116 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const {
+      businessId = "tenant-sandhya-jaipur",
+      action,
+      creditNoteNumber,
+      originalInvoiceNumber,
+      returnedItems = [],
+      totalRefundAmount = 0,
+      refundMethod = "Credit Note",
+      customerPhone,
+    } = body;
+
+    if (action !== "sales_return" || !originalInvoiceNumber) {
+      return NextResponse.json(
+        { error: "Valid action='sales_return' and originalInvoiceNumber are required." },
+        { status: 400 }
+      );
+    }
+
+    await ensureBusinessRecord(businessId);
+
+    const summary = await prisma.$transaction(async (tx) => {
+      const restockedIds: string[] = [];
+
+      for (const item of returnedItems) {
+        let matchedStock = null;
+        if (item.stockItemId) {
+          matchedStock = await tx.stockItem.findUnique({ where: { id: item.stockItemId } });
+        }
+        if (!matchedStock && item.barcode) {
+          matchedStock = await tx.stockItem.findUnique({ where: { barcode: item.barcode } });
+        }
+
+        if (matchedStock) {
+          const dest = item.restockDestination || "showcase";
+          const toStatus =
+            dest === "repair_vault"
+              ? "IN_REPAIR"
+              : dest === "melting_scrap"
+              ? "IN_VAULT"
+              : "IN_SHOWCASE";
+          const toLocation =
+            dest === "repair_vault"
+              ? "Repair Workshop Safe"
+              : dest === "melting_scrap"
+              ? "Vault Safe #Melting Box"
+              : matchedStock.trayLocation || "Showcase Tray #1";
+
+          await tx.stockItem.update({
+            where: { id: matchedStock.id },
+            data: { status: toStatus as any, trayLocation: toLocation },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              stockItemId: matchedStock.id,
+              fromStatus: matchedStock.status,
+              toStatus: toStatus as any,
+              fromLocation: "CUSTOMER",
+              toLocation,
+              reason: `Sales Return ${creditNoteNumber || ""} on Invoice ${originalInvoiceNumber}`.trim(),
+              referenceType: "SALES_RETURN",
+              referenceId: creditNoteNumber || originalInvoiceNumber,
+            },
+          });
+
+          restockedIds.push(matchedStock.id);
+        }
+      }
+
+      const refundAmt = Number(totalRefundAmount || 0);
+      if (refundAmt > 0) {
+        // Reverse revenue on 3010
+        await adjustAccountBalance(tx, businessId, "3010", -refundAmt);
+
+        const mode = String(refundMethod).toLowerCase();
+        if (mode.includes("cash")) {
+          await adjustAccountBalance(tx, businessId, "1010", -refundAmt);
+        } else if (mode.includes("upi")) {
+          await adjustAccountBalance(tx, businessId, "1030", -refundAmt);
+        } else if (mode.includes("bank")) {
+          await adjustAccountBalance(tx, businessId, "1020", -refundAmt);
+        } else {
+          // Credit Note -> grant customer store credit (negative outstandingDue) if matched by phone
+          if (customerPhone) {
+            const existingCust = await tx.customer.findUnique({
+              where: { businessId_phone: { businessId, phone: String(customerPhone).trim() } },
+            });
+            if (existingCust) {
+              await tx.customer.update({
+                where: { id: existingCust.id },
+                data: { outstandingDue: { decrement: new Prisma.Decimal(refundAmt) } },
+              });
+            }
+          }
+          await adjustAccountBalance(tx, businessId, "2030", refundAmt);
+        }
+      }
+
+      return { restockedIds };
+    });
+
+    return NextResponse.json({ success: true, ...summary });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to persist sales return.", details: String(error) },
+      { status: 500 }
+    );
+  }
+}

@@ -14,7 +14,13 @@ import {
   calculateDenominationTotal,
   recordExpense as storeRecordExpense,
   recordDailyCashClosing as storeRecordClosing,
+  getSavedJournalEntries,
 } from "../../modules/accounts/store";
+import { FinalizedInvoice } from "../../modules/invoicing/types";
+import { SupplierPaymentRecord } from "../../modules/suppliers/types";
+import { GirviLoan } from "../../modules/girvi/types";
+import { KarigarTransaction } from "../../modules/karigar/types";
+import { StaffPaymentRecord } from "../../modules/staff/types";
 import { formatINR } from "../../lib/formatters";
 import { GlassPanel } from "../glass/GlassPanel";
 import { GlassButton } from "../glass/GlassButton";
@@ -40,12 +46,18 @@ import {
   Package,
   Zap,
   Users,
+  Printer,
 } from "lucide-react";
 
 export interface AccountsManagerProps {
   accounts: Account[];
   expenses: ShopExpense[];
   dailyClosings: DailyCashClosing[];
+  invoices?: FinalizedInvoice[];
+  supplierPayments?: SupplierPaymentRecord[];
+  girviLoans?: GirviLoan[];
+  karigarTxns?: KarigarTransaction[];
+  staffPayments?: StaffPaymentRecord[];
   onRecordExpense?: (input: RecordExpenseInput) => void;
   onRecordClosing?: (input: RecordCashClosingInput) => void;
   shopName: string;
@@ -57,14 +69,22 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   accounts: initialAccounts,
   expenses: initialExpenses,
   dailyClosings: initialClosings,
+  invoices = [],
+  supplierPayments = [],
+  girviLoans = [],
+  karigarTxns = [],
+  staffPayments = [],
   onRecordExpense,
   onRecordClosing,
   shopName,
   tenantId,
   currentUser = "Harshit Raj (Owner)",
 }) => {
-  const [activeTab, setActiveTab] = useState<"closing" | "expenses" | "chart">("closing");
+  const [activeTab, setActiveTab] = useState<"closing" | "daybook" | "expenses" | "chart">(
+    "closing"
+  );
   const [searchQuery, setSearchQuery] = useState("");
+  const [dayBookDate, setDayBookDate] = useState<string>("");
 
   const [accounts, setAccounts] = useState<Account[]>(initialAccounts);
   const [expenses, setExpenses] = useState<ShopExpense[]>(initialExpenses);
@@ -335,6 +355,16 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
             }`}
           >
             Daily Cash Closing / रोकड़ मिलान
+          </button>
+          <button
+            onClick={() => setActiveTab("daybook")}
+            className={`px-3 py-1 rounded text-xs transition-colors ${
+              activeTab === "daybook"
+                ? "bg-[#C5A059]/20 text-[#DFC488] font-semibold"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Day Book / रोजनामचा
           </button>
           <button
             onClick={() => setActiveTab("expenses")}
@@ -971,6 +1001,286 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
           </GlassPanel>
         </div>
       )}
+
+      {/* Tab 4: Unified Day Book / रोजनामचा */}
+      {activeTab === "daybook" &&
+        (() => {
+          type DayBookRow = {
+            id: string;
+            date: string;
+            module: string;
+            ref: string;
+            particulars: string;
+            mode: string;
+            credit: number;
+            debit: number;
+          };
+
+          const allRows: DayBookRow[] = [];
+
+          for (const inv of invoices) {
+            const d = (inv.invoiceDate || inv.createdAt || "").slice(0, 10);
+            const paid = inv.totalPaid || 0;
+            const modes = inv.payments?.map((p) => p.method).join(", ") || "Cash";
+            if (paid > 0) {
+              allRows.push({
+                id: `inv-${inv.id}`,
+                date: d,
+                module: "Counter Sale",
+                ref: inv.invoiceNumber,
+                particulars: `${inv.customer.name} (${inv.items.length} item${inv.items.length === 1 ? "" : "s"})`,
+                mode: modes,
+                credit: paid,
+                debit: 0,
+              });
+            }
+          }
+
+          for (const exp of expenses) {
+            allRows.push({
+              id: `exp-${exp.id}`,
+              date: (exp.date || "").slice(0, 10),
+              module: "Shop Expense",
+              ref: exp.voucherNumber || "VCH",
+              particulars: `${exp.paidTo} · ${exp.category}`,
+              mode: exp.paymentMode,
+              credit: 0,
+              debit: exp.amount,
+            });
+          }
+
+          for (const sp of supplierPayments) {
+            allRows.push({
+              id: `sup-${sp.id}`,
+              date: (sp.date || "").slice(0, 10),
+              module: "Supplier Pay",
+              ref: sp.referenceNo || "SUP",
+              particulars: sp.supplierName,
+              mode: sp.method,
+              credit: 0,
+              debit: sp.amount,
+            });
+          }
+
+          for (const g of girviLoans) {
+            allRows.push({
+              id: `grv-in-${g.id}`,
+              date: (g.startDate || "").slice(0, 10),
+              module: "Girvi Disbursed",
+              ref: g.loanNumber,
+              particulars: `Pawn Loan to ${g.customerName}`,
+              mode: "Cash",
+              credit: 0,
+              debit: g.principalAmount,
+            });
+            if (g.status === "released") {
+              allRows.push({
+                id: `grv-rel-${g.id}`,
+                date: (g.dueDate || g.startDate || "").slice(0, 10),
+                module: "Girvi Release",
+                ref: g.loanNumber,
+                particulars: `Principal + Interest repaid by ${g.customerName}`,
+                mode: "Cash/Bank",
+                credit: g.principalAmount + (g.totalInterestPaid || 0),
+                debit: 0,
+              });
+            }
+          }
+
+          for (const kt of karigarTxns) {
+            if (kt.type === "labour_payment" && (kt.paymentAmount || 0) > 0) {
+              allRows.push({
+                id: `kar-${kt.id}`,
+                date: (kt.date || "").slice(0, 10),
+                module: "Karigar Labour",
+                ref: "KRG",
+                particulars: `Making Paid to ${kt.karigarName}`,
+                mode: "Cash/Bank",
+                credit: 0,
+                debit: kt.paymentAmount || 0,
+              });
+            }
+          }
+
+          for (const st of staffPayments) {
+            allRows.push({
+              id: `stf-${st.id}`,
+              date: (st.date || "").slice(0, 10),
+              module: st.type === "advance" ? "Staff Advance" : "Staff Payroll",
+              ref: "PAY",
+              particulars: `${st.staffName}${st.notes ? " · " + st.notes : ""}`,
+              mode: st.paymentMethod,
+              credit: 0,
+              debit: st.amount,
+            });
+          }
+
+          for (const j of getSavedJournalEntries(tenantId)) {
+            if (j.referenceType === "MANUAL" || j.referenceId.startsWith("CRN-")) {
+              const isRefund = j.referenceId.startsWith("CRN-");
+              allRows.push({
+                id: `jnl-${j.id}`,
+                date: (j.timestamp || "").slice(0, 10),
+                module: isRefund ? "Sales Return" : "Customer CR/DR",
+                ref: j.referenceId,
+                particulars: j.narration,
+                mode: "Ledger",
+                credit: isRefund || j.referenceId.startsWith("UDHAR-") ? 0 : j.totalCredit,
+                debit: isRefund || j.referenceId.startsWith("UDHAR-") ? j.totalDebit : 0,
+              });
+            }
+          }
+
+          const q = searchQuery.toLowerCase();
+          const filteredRows = allRows
+            .filter((r) => (!dayBookDate || r.date === dayBookDate))
+            .filter(
+              (r) =>
+                !q ||
+                r.particulars.toLowerCase().includes(q) ||
+                r.module.toLowerCase().includes(q) ||
+                r.ref.toLowerCase().includes(q)
+            )
+            .sort((a, b) => (b.date > a.date ? 1 : -1));
+
+          const totalCredit = filteredRows.reduce((s, r) => s + r.credit, 0);
+          const totalDebit = filteredRows.reduce((s, r) => s + r.debit, 0);
+          const netCashDelta = totalCredit - totalDebit;
+
+          return (
+            <div className="space-y-4">
+              <GlassPanel className="p-4 sm:p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.06]">
+                  <div>
+                    <h3 className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                      <BookOpen size={17} className="text-[#DFC488]" />
+                      Unified Roznamcha / Day Book ({shopName})
+                    </h3>
+                    <p className="text-xs text-[var(--text-tertiary)]">
+                      Chronological CR/DR register across Counter Sales, Customer Udhar, Girvi, Expenses, Karigar, Suppliers &amp; Payroll.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      value={dayBookDate}
+                      onChange={(e) => setDayBookDate(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)]"
+                    />
+                    {dayBookDate && (
+                      <GlassButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDayBookDate("")}
+                      >
+                        Show All Dates
+                      </GlassButton>
+                    )}
+                    <GlassButton
+                      variant="secondary"
+                      size="sm"
+                      icon={<Printer size={13} />}
+                      onClick={() => window.print()}
+                    >
+                      Print Roznamcha
+                    </GlassButton>
+                  </div>
+                </div>
+
+                {/* Roznamcha Summary Strip */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
+                    <span className="text-emerald-300 flex items-center gap-1.5">
+                      <ArrowDownLeft size={14} /> Total Receipts (CR / जमा)
+                    </span>
+                    <span className="font-mono font-bold text-emerald-300">
+                      +{formatINR(totalCredit)}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-between">
+                    <span className="text-rose-300 flex items-center gap-1.5">
+                      <ArrowUpRight size={14} /> Total Payments (DR / नाम)
+                    </span>
+                    <span className="font-mono font-bold text-rose-300">
+                      -{formatINR(totalDebit)}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-between">
+                    <span className="text-[var(--text-secondary)]">Net Period Cashflow</span>
+                    <span
+                      className={`font-mono font-bold ${
+                        netCashDelta >= 0 ? "text-[#DFC488]" : "text-rose-400"
+                      }`}
+                    >
+                      {netCashDelta >= 0 ? "+" : ""}
+                      {formatINR(netCashDelta)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Day Book Table */}
+                <div className="overflow-x-auto rounded-lg border border-white/[0.06]">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-white/[0.06] text-[var(--text-secondary)] uppercase tracking-wider text-[10px] bg-white/[0.02]">
+                        <th className="py-2.5 px-3 font-semibold">Date</th>
+                        <th className="py-2.5 px-3 font-semibold">Module / Head</th>
+                        <th className="py-2.5 px-3 font-semibold">Ref #</th>
+                        <th className="py-2.5 px-3 font-semibold">Particulars</th>
+                        <th className="py-2.5 px-3 font-semibold">Mode</th>
+                        <th className="py-2.5 px-3 font-semibold text-right">CR (जमा ₹)</th>
+                        <th className="py-2.5 px-3 font-semibold text-right">DR (नाम ₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.04]">
+                      {filteredRows.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="py-10 text-center text-xs text-[var(--text-tertiary)]"
+                          >
+                            No entries found for the selected filter.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredRows.map((row) => (
+                          <tr key={row.id} className="hover:bg-white/[0.02]">
+                            <td className="py-2.5 px-3 font-mono text-[11px] text-[var(--text-secondary)]">
+                              {row.date}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <GlassBadge
+                                variant={row.credit > 0 ? "emerald" : "gold"}
+                                size="sm"
+                              >
+                                {row.module}
+                              </GlassBadge>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-[#DFC488]">
+                              {row.ref}
+                            </td>
+                            <td className="py-2.5 px-3 text-[var(--text-primary)]">
+                              {row.particulars}
+                            </td>
+                            <td className="py-2.5 px-3 text-[var(--text-secondary)]">
+                              {row.mode}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-emerald-400">
+                              {row.credit > 0 ? formatINR(row.credit) : "—"}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-rose-400">
+                              {row.debit > 0 ? formatINR(row.debit) : "—"}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </GlassPanel>
+            </div>
+          );
+        })()}
 
       {/* Modal 1: Log Shop Expense */}
       {isExpenseModalOpen && (

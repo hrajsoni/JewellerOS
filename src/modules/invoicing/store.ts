@@ -382,7 +382,7 @@ export function processSalesReturn(
     const refundMode = returnReq.refundMethod;
     const isCreditNote = refundMode === "Credit Note";
     const creditAccount = isCreditNote
-      ? { code: "2050", name: "Customer Credit Notes Payable" }
+      ? { code: "2030", name: "Customer Booking Advances & Credit Notes" }
       : refundMode === "Bank Transfer"
       ? { code: "1020", name: "Current Bank Account (HDFC/SBI)" }
       : refundMode === "UPI"

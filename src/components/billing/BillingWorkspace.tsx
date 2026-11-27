@@ -8,7 +8,11 @@ import {
   FinalizedInvoice,
   PaymentMethod,
   PaymentRecord,
+  SalesReturnRecord,
 } from "../../modules/invoicing/types";
+import { StockItem } from "../../modules/inventory/types";
+import { calculateGoldPricing, calculateSilverPricing } from "../../modules/pricing/engine";
+import { GoldPurityKey, SilverPurityKey } from "../../modules/pricing/types";
 import { formatINR, formatGrams } from "../../lib/formatters";
 import { GlassButton } from "../glass/GlassButton";
 import { GlassInput } from "../glass/GlassInput";
@@ -27,6 +31,7 @@ import {
   Banknote,
   Smartphone,
   Building,
+  Barcode,
 } from "lucide-react";
 
 export interface BillingWorkspaceProps {
@@ -35,6 +40,10 @@ export interface BillingWorkspaceProps {
   onNavigateToCalculator: () => void;
   onFinalizeInvoice: (invoice: FinalizedInvoice) => void;
   gold24kRate: number;
+  silverRate?: number;
+  stockItems?: StockItem[];
+  onAddScannedItem?: (item: InvoiceLineItem) => void;
+  onReturnProcessed?: (record: SalesReturnRecord) => void;
   shopDetails: {
     name: string;
     address: string;
@@ -50,6 +59,10 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
   onNavigateToCalculator,
   onFinalizeInvoice,
   gold24kRate,
+  silverRate = 95000,
+  stockItems = [],
+  onAddScannedItem,
+  onReturnProcessed,
   shopDetails,
   selectedCustomer,
 }) => {
@@ -59,6 +72,100 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
   const [customerCity, setCustomerCity] = useState("Jaipur");
   const [customerGstin, setCustomerGstin] = useState("URP (Retail Consumer)");
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+
+  // Fast Barcode / SKU Scanner State
+  const [scanCode, setScanCode] = useState("");
+  const [scanStatus, setScanStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const handleBarcodeScanSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = scanCode.trim().toLowerCase();
+    if (!query || !onAddScannedItem) return;
+
+    const matched = stockItems.find(
+      (s) =>
+        (s.barcode.toLowerCase() === query || s.sku.toLowerCase() === query) &&
+        s.status !== "sold"
+    );
+
+    if (!matched) {
+      setScanStatus({
+        ok: false,
+        msg: `No available unsold stock found matching "${scanCode.trim()}"`,
+      });
+      return;
+    }
+
+    if (draftItems.some((d) => d.stockItemId === matched.id)) {
+      setScanStatus({
+        ok: false,
+        msg: `"${matched.name}" (${matched.barcode}) is already in this bill.`,
+      });
+      return;
+    }
+
+    const totalDed = (matched.stoneWeight || 0) + (matched.otherDeductions || 0);
+    const calc =
+      matched.metal === "silver"
+        ? calculateSilverPricing({
+            metal: "silver",
+            productName: matched.name,
+            grossWeight: matched.grossWeight,
+            stoneDeduction: totalDed,
+            purityKey: (["999", "925", "900", "800"].includes(String(matched.purity))
+              ? matched.purity
+              : "999") as SilverPurityKey,
+            silverRate,
+            rateUnit: "per_kg",
+            makingType: matched.defaultMakingType,
+            makingValue: matched.defaultMakingValue,
+          })
+        : calculateGoldPricing({
+            metal: "gold",
+            productName: matched.name,
+            grossWeight: matched.grossWeight,
+            stoneDeduction: totalDed,
+            purityKey: (["24K", "23K", "22K", "18K", "14K"].includes(String(matched.purity))
+              ? matched.purity
+              : "22K") as GoldPurityKey,
+            rate24kPer10g: gold24kRate,
+            makingType: matched.defaultMakingType,
+            makingValue: matched.defaultMakingValue,
+          });
+
+    const lineItem: InvoiceLineItem = {
+      id: `item-scan-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      stockItemId: matched.id,
+      barcode: matched.barcode,
+      sku: matched.sku,
+      name: matched.name,
+      metal: matched.metal,
+      purity: matched.purity,
+      purityDisplay: `${matched.purity} (${matched.category})`,
+      grossWeight: matched.grossWeight,
+      stoneWeight: totalDed,
+      netWeight: calc.billableWeight.toNumber(),
+      metalRate: matched.metal === "gold" ? gold24kRate : silverRate,
+      effectiveRatePerGram: calc.effectiveRatePerGram.toNumber(),
+      metalValue: calc.metalValue.toNumber(),
+      makingType: matched.defaultMakingType,
+      makingRate: matched.defaultMakingValue,
+      makingCharges: calc.makingCharges.toNumber(),
+      stoneValue: 0,
+      discount: 0,
+      totalBeforeTax: calc.subtotalBeforeTax.toNumber(),
+      fineWeight: calc.fineWeight.toNumber(),
+      fineGoldValue24k: calc.fineGoldValue24k.toNumber(),
+      wastagePercentage: calc.wastagePercentage.toNumber(),
+    };
+
+    onAddScannedItem(lineItem);
+    setScanCode("");
+    setScanStatus({
+      ok: true,
+      msg: `Added ${matched.name} (${matched.sku}) · ${formatINR(lineItem.totalBeforeTax)}`,
+    });
+  };
 
   // Sync selected customer from directory
   React.useEffect(() => {
@@ -338,6 +445,38 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
                 <Plus size={13} /> Add More Items
               </button>
             </div>
+
+            {onAddScannedItem && (
+              <form onSubmit={handleBarcodeScanSubmit} className="space-y-2">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Barcode
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#C5A059] pointer-events-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Scan tag barcode or enter SKU (e.g. 8909160001) & press Enter..."
+                      value={scanCode}
+                      onChange={(e) => setScanCode(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-xs font-mono rounded-lg bg-black/40 border border-white/[0.08] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[#C5A059]/70"
+                    />
+                  </div>
+                  <GlassButton type="submit" variant="gold-outline" size="sm">
+                    Scan & Add
+                  </GlassButton>
+                </div>
+                {scanStatus && (
+                  <p
+                    className={`text-[11px] font-medium ${
+                      scanStatus.ok ? "text-emerald-400" : "text-amber-400"
+                    }`}
+                  >
+                    {scanStatus.msg}
+                  </p>
+                )}
+              </form>
+            )}
 
             {draftItems.length === 0 ? (
               <div className="py-8 text-center text-xs text-[var(--text-tertiary)] space-y-2">
@@ -741,6 +880,7 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
       <SalesReturnModal
         isOpen={isReturnModalOpen}
         onClose={() => setIsReturnModalOpen(false)}
+        onReturnProcessed={onReturnProcessed}
       />
     </div>
   );

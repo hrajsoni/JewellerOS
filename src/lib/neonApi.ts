@@ -1,4 +1,4 @@
-import { FinalizedInvoice } from "../modules/invoicing/types";
+import { FinalizedInvoice, SalesReturnRecord } from "../modules/invoicing/types";
 import { StockItem } from "../modules/inventory/types";
 import { Customer, NewCustomerInput } from "../modules/customers/types";
 import { GirviLoan, NewGirviInput } from "../modules/girvi/types";
@@ -173,6 +173,26 @@ export const neonApi = {
     });
   },
 
+  updateStockItem(item: StockItem) {
+    return apiRequest("/api/stock", "PATCH", {
+      action: "edit_item",
+      stockItemId: item.id,
+      barcode: item.barcode,
+      title: item.name,
+      purityKey: item.purity,
+      grossWeight: item.grossWeight,
+      stoneWeight: item.stoneWeight,
+      otherDeductions: item.otherDeductions || 0,
+      netWeight: item.netWeight,
+      fineGoldEq: item.fineWeight || item.netWeight,
+      makingType: item.defaultMakingType,
+      makingValue: item.defaultMakingValue,
+      acquisitionCost: item.acquisitionCost,
+      trayLocation: item.trayLocation,
+      huid: item.huid,
+    });
+  },
+
   persistInvoice(businessId: string, inv: FinalizedInvoice, createdById?: string) {
     const makingTotal = inv.items.reduce((s, it) => s + (it.makingCharges || 0), 0);
     return apiRequest("/api/invoices", "POST", {
@@ -202,8 +222,35 @@ export const neonApi = {
     });
   },
 
+  processSalesReturn(businessId: string, record: SalesReturnRecord) {
+    return apiRequest("/api/invoices", "PATCH", {
+      businessId,
+      action: "sales_return",
+      creditNoteNumber: record.creditNoteNumber,
+      originalInvoiceNumber: record.originalInvoiceNumber,
+      returnedItems: record.returnedItems,
+      totalRefundAmount: record.totalRefundAmount,
+      refundMethod: record.refundMethod,
+      customerPhone: record.customer?.phone,
+    });
+  },
+
   addCustomer(businessId: string, input: NewCustomerInput) {
     return apiRequest("/api/customers", "POST", { businessId, ...input });
+  },
+
+  settleCustomerBalance(
+    businessId: string,
+    payload: {
+      customerId: string;
+      customerPhone?: string;
+      customerName?: string;
+      paymentAmount: number;
+      entryType: "collect_udhar" | "record_advance" | "add_udhar";
+      method: string;
+    }
+  ) {
+    return apiRequest("/api/customers", "PATCH", { businessId, ...payload });
   },
 
   createGirviLoan(businessId: string, input: NewGirviInput) {

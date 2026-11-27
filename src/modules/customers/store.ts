@@ -1,5 +1,6 @@
 import { Customer, NewCustomerInput } from "./types";
 import { FinalizedInvoice } from "../invoicing/types";
+import { recordJournalPosting } from "../accounts/store";
 
 const CUSTOMERS_STORAGE_KEY = "jewellery_os_customers_v2";
 
@@ -222,4 +223,84 @@ export function recordInvoiceToCustomer(invoice: FinalizedInvoice, tenantId?: st
 
   saveCustomers(updatedList, tenantId);
   return updatedList;
+}
+
+export function recordCustomerBalanceEntry(
+  customerId: string,
+  amount: number,
+  entryType: "collect_udhar" | "record_advance" | "add_udhar",
+  method: "Cash" | "UPI" | "Card" | "Bank Transfer" = "Cash",
+  notes?: string,
+  tenantId?: string,
+  performedBy?: string
+): { updatedCustomers: Customer[]; updatedCustomer: Customer } | null {
+  const cleanAmount = Math.round(Number(amount) * 100) / 100;
+  if (!cleanAmount || cleanAmount <= 0) return null;
+
+  const customers = getSavedCustomers(tenantId);
+  const existing = customers.find((c) => c.id === customerId);
+  if (!existing) return null;
+
+  const delta = entryType === "add_udhar" ? -cleanAmount : cleanAmount;
+  const noteStamp = `${new Date().toISOString().split("T")[0]} [${entryType === "add_udhar" ? "Udhar +" : entryType === "record_advance" ? "Advance +" : "Collection "}₹${cleanAmount} via ${method}]${notes ? " - " + notes : ""}`;
+
+  const updatedCustomer: Customer = {
+    ...existing,
+    outstandingCredit: Math.round((existing.outstandingCredit + delta) * 100) / 100,
+    lastVisitDate: new Date().toISOString().split("T")[0],
+    notes: existing.notes ? `${existing.notes}\n${noteStamp}` : noteStamp,
+  };
+
+  const updatedCustomers = customers.map((c) => (c.id === customerId ? updatedCustomer : c));
+  saveCustomers(updatedCustomers, tenantId);
+
+  // Post double-entry journal voucher to Accounts & Day Book
+  const acctCode =
+    method === "UPI" ? "1030" : method === "Card" || method === "Bank Transfer" ? "1020" : "1010";
+
+  if (entryType === "add_udhar") {
+    recordJournalPosting(
+      {
+        referenceType: "MANUAL",
+        referenceId: `UDHAR-${existing.name.slice(0, 8).toUpperCase()}`,
+        narration: `Udhar Debit recorded for ${existing.name} (${existing.phone})${notes ? " · " + notes : ""}`,
+        performedBy: performedBy || "Cashier",
+        lines: [
+          { accountCode: "1050", debit: cleanAmount },
+          { accountCode: "3010", credit: cleanAmount },
+        ],
+      },
+      tenantId
+    );
+  } else if (entryType === "record_advance") {
+    recordJournalPosting(
+      {
+        referenceType: "MANUAL",
+        referenceId: `ADV-${existing.name.slice(0, 8).toUpperCase()}`,
+        narration: `Customer Advance Deposit (${method}) from ${existing.name}${notes ? " · " + notes : ""}`,
+        performedBy: performedBy || "Cashier",
+        lines: [
+          { accountCode: acctCode, debit: cleanAmount },
+          { accountCode: "2030", credit: cleanAmount },
+        ],
+      },
+      tenantId
+    );
+  } else {
+    recordJournalPosting(
+      {
+        referenceType: "MANUAL",
+        referenceId: `REC-${existing.name.slice(0, 8).toUpperCase()}`,
+        narration: `Udhar Collection (${method}) from ${existing.name}${notes ? " · " + notes : ""}`,
+        performedBy: performedBy || "Cashier",
+        lines: [
+          { accountCode: acctCode, debit: cleanAmount },
+          { accountCode: "1050", credit: cleanAmount },
+        ],
+      },
+      tenantId
+    );
+  }
+
+  return { updatedCustomers, updatedCustomer };
 }

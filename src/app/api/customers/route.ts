@@ -87,27 +87,82 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { businessId = "tenant-sandhya-jaipur", customerId, paymentAmount = 0, method = "Cash" } = body;
+    const {
+      businessId = "tenant-sandhya-jaipur",
+      customerId,
+      customerPhone,
+      customerName,
+      paymentAmount = 0,
+      entryType = "collect_udhar",
+      method = "Cash",
+    } = body;
 
-    if (!customerId || Number(paymentAmount) <= 0) {
-      return NextResponse.json({ error: "customerId and positive paymentAmount required." }, { status: 400 });
+    const amt = Number(paymentAmount);
+    if ((!customerId && !customerPhone) || !amt || amt <= 0) {
+      return NextResponse.json(
+        { error: "customerId or customerPhone and positive paymentAmount required." },
+        { status: 400 }
+      );
     }
 
+    await ensureBusinessRecord(businessId);
+
     const updated = await prisma.$transaction(async (tx) => {
+      let existing = customerId
+        ? await tx.customer.findUnique({ where: { id: customerId } })
+        : null;
+
+      if (!existing && customerPhone) {
+        existing = await tx.customer.findUnique({
+          where: {
+            businessId_phone: { businessId, phone: String(customerPhone).trim() },
+          },
+        });
+      }
+
+      if (!existing && customerPhone) {
+        existing = await tx.customer.create({
+          data: {
+            businessId,
+            name: customerName || "Showroom Customer",
+            phone: String(customerPhone).trim(),
+            city: "Jaipur",
+            outstandingDue: new Prisma.Decimal(0),
+          },
+        });
+      }
+
+      if (!existing) {
+        throw new Error("Customer record not found in database.");
+      }
+
+      const isCharge = entryType === "add_udhar";
       const cust = await tx.customer.update({
-        where: { id: customerId },
+        where: { id: existing.id },
         data: {
-          outstandingDue: { decrement: new Prisma.Decimal(paymentAmount) },
+          outstandingDue: isCharge
+            ? { increment: new Prisma.Decimal(amt) }
+            : { decrement: new Prisma.Decimal(amt) },
         },
       });
 
-      const acctCode = String(method).toLowerCase().includes("upi")
+      const lower = String(method).toLowerCase();
+      const acctCode = lower.includes("upi")
         ? "1030"
-        : String(method).toLowerCase().includes("bank")
+        : lower.includes("bank") || lower.includes("card")
         ? "1020"
         : "1010";
-      await adjustAccountBalance(tx, businessId, acctCode, Number(paymentAmount));
-      await adjustAccountBalance(tx, businessId, "1050", -Number(paymentAmount));
+
+      if (isCharge) {
+        await adjustAccountBalance(tx, businessId, "1050", amt);
+      } else {
+        await adjustAccountBalance(tx, businessId, acctCode, amt);
+        if (entryType === "record_advance") {
+          await adjustAccountBalance(tx, businessId, "2030", amt);
+        } else {
+          await adjustAccountBalance(tx, businessId, "1050", -amt);
+        }
+      }
 
       return cust;
     });
