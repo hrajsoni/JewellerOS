@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { RoleType, UserProfile, UserSession, LoginCredentials } from "./types";
 
 const AUTH_SESSION_KEY = "jewellery_os_active_session_v1";
+const LOGOUT_FLAG_KEY = "jewellery_os_logged_out_v1";
 
 export const INITIAL_USER_PINS: Record<string, string> = {
   "user-harshit-owner": "884219",
@@ -312,7 +313,63 @@ export function adminResetPin(
   return { success: true };
 }
 
+export function isLoggedOutState(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(LOGOUT_FLAG_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function setLoggedOutState(loggedOut: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (loggedOut) {
+      localStorage.setItem(LOGOUT_FLAG_KEY, "true");
+    } else {
+      localStorage.removeItem(LOGOUT_FLAG_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function registerLocalUserProfile(session: UserSession, pin: string): void {
+  const existing = getTenantUsers(session.businessId);
+  const already = existing.some(
+    (u) =>
+      u.id === session.id ||
+      (session.email && u.email?.toLowerCase() === session.email.toLowerCase()) ||
+      (session.phone && u.phone === session.phone)
+  );
+  if (!already) {
+    const newProfile: UserProfile & { pin: string; pinHash: string } = {
+      id: session.id,
+      fullName: session.fullName,
+      email: session.email || "",
+      phone: session.phone || "",
+      role: session.role,
+      businessId: session.businessId,
+      isActive: true,
+      advanceBalance: 0,
+      pin: pin.trim(),
+      pinHash: hashPin(pin),
+      createdAt: new Date().toISOString(),
+    };
+    saveTenantUsers([newProfile, ...existing], session.businessId);
+  }
+  setLoggedOutState(false);
+  setCurrentSession(session);
+}
+
 export function logoutUser(): void {
-  // Reset to owner default for seamless showroom continuity
-  setCurrentSession(DEFAULT_SESSION);
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(AUTH_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+    setLoggedOutState(true);
+  }
 }

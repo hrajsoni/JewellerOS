@@ -100,6 +100,29 @@ async function apiRequest<T = any>(
   }
 }
 
+async function apiAuthRequest<T = any>(
+  url: string,
+  body?: unknown
+): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  if (typeof window === "undefined") {
+    return { ok: false, error: "Window unavailable" };
+  }
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: json?.error || `Request failed (${res.status})` };
+    }
+    return { ok: true, data: json as T };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+}
+
 export const neonApi = {
   bootstrap(tenantId: string) {
     return apiRequest<BootstrapPayload>(
@@ -110,6 +133,51 @@ export const neonApi = {
 
   login(emailOrPhone: string, pin: string, tenantId: string) {
     return apiRequest("/api/auth/login", "POST", { emailOrPhone, pin, tenantId });
+  },
+
+  loginWithPinApi(emailOrPhone: string, pin: string, tenantId?: string) {
+    return apiAuthRequest("/api/auth/login", { method: "pin", emailOrPhone, pin, tenantId });
+  },
+
+  loginWithOtpApi(payload: {
+    email?: string;
+    phone?: string;
+    emailOrPhone?: string;
+    challengeId: string;
+    otp: string;
+  }) {
+    return apiAuthRequest("/api/auth/login", { method: "otp", ...payload });
+  },
+
+  sendOtp(payload: {
+    email?: string;
+    phone?: string;
+    purpose: "SIGNUP" | "LOGIN" | "RESET_PIN";
+    tenantId?: string;
+  }) {
+    return apiAuthRequest("/api/auth/otp/send", payload);
+  },
+
+  verifyOtp(challengeId: string, otp: string) {
+    return apiAuthRequest("/api/auth/otp/verify", { challengeId, otp });
+  },
+
+  registerAccount(payload: {
+    fullName: string;
+    email?: string;
+    phone?: string;
+    pin: string;
+    role?: string;
+    businessId?: string;
+    businessName?: string;
+    challengeId: string;
+    otp: string;
+  }) {
+    return apiAuthRequest("/api/auth/register", payload);
+  },
+
+  logoutApi() {
+    return apiAuthRequest("/api/auth/logout", {});
   },
 
   registerTenant(input: RegisterJewellerInput & { id?: string }) {

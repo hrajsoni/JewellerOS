@@ -23,7 +23,7 @@ import {
   Database,
 } from "lucide-react";
 import { AuthProvider, useAuth } from "../modules/auth/AuthContext";
-import { LoginModal } from "../components/auth/LoginModal";
+import { LoginModal, AuthGateScreen } from "../components/auth/LoginModal";
 import { MetalRatesModal } from "../components/rates/MetalRatesModal";
 import { getLatestMetalRates } from "../modules/rates/store";
 import {
@@ -1590,10 +1590,18 @@ function WorkspaceMain() {
   );
 }
 
+function WorkspaceGate() {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) {
+    return <AuthGateScreen />;
+  }
+  return <WorkspaceMain />;
+}
+
 export default function WorkspacePage() {
   return (
     <AuthProvider>
-      <WorkspaceMain />
+      <WorkspaceGate />
     </AuthProvider>
   );
 }

@@ -91,8 +91,10 @@ model User {
   businessId     String
   branchId       String?
   fullName       String      @db.VarChar(100)
-  email          String      @unique @db.VarChar(100)
-  phone          String      @db.VarChar(20)
+  email          String?     @unique @db.VarChar(100)
+  phone          String?     @db.VarChar(20)
+  emailVerified  Boolean     @default(false)
+  phoneVerified  Boolean     @default(false)
   passwordHash   String      @db.Text
   role           RoleType    @default(SALESPERSON)
   isActive       Boolean     @default(true)
@@ -106,7 +108,34 @@ model User {
   branch         Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
   auditLogs      AuditLog[]
 
+  @@index([businessId, phone])
   @@map("users")
+}
+
+enum OtpChannel {
+  EMAIL
+  PHONE
+}
+
+enum OtpPurpose {
+  SIGNUP
+  LOGIN
+  RESET_PIN
+}
+
+model OtpChallenge {
+  id         String     @id @default(cuid())
+  channel    OtpChannel
+  target     String     @db.VarChar(120)
+  purpose    OtpPurpose @default(SIGNUP)
+  codeHash   String     @db.Text
+  attempts   Int        @default(0)
+  verifiedAt DateTime?  @db.Timestamptz
+  expiresAt  DateTime   @db.Timestamptz
+  createdAt  DateTime   @default(now()) @db.Timestamptz
+
+  @@index([target, purpose])
+  @@map("otp_challenges")
 }
 
 model ShowroomMasterSettings {

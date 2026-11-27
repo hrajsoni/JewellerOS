@@ -12,6 +12,7 @@ import {
   INITIAL_USER_PINS,
 } from "../../src/modules/auth/store";
 import { ROLE_PERMISSIONS, hasPermission } from "../../src/modules/auth/permissions";
+import { resolveOtpDestination } from "../../src/lib/otpRules";
 
 describe("JewelleryOS Milestone 10: Authentication, Unique Salted PINs & Strict RBAC Tests", () => {
   beforeEach(() => {
@@ -194,5 +195,39 @@ describe("JewelleryOS Milestone 10: Authentication, Unique Salted PINs & Strict 
       tenantMumbai
     );
     assert.strictEqual(mumbaiLogin.session !== null, true);
+  });
+
+  it("OTP Channel Priority: Uses Email when only Email or BOTH Email+Phone are entered, Phone when only Phone entered", () => {
+    // 1. Email only
+    const emailOnly = resolveOtpDestination({ email: " Harshit@Example.COM ", phone: "" });
+    assert.strictEqual(emailOnly.ok, true);
+    if (emailOnly.ok) {
+      assert.strictEqual(emailOnly.channel, "EMAIL");
+      assert.strictEqual(emailOnly.target, "harshit@example.com");
+    }
+
+    // 2. Phone only
+    const phoneOnly = resolveOtpDestination({ email: "", phone: "98290 12345" });
+    assert.strictEqual(phoneOnly.ok, true);
+    if (phoneOnly.ok) {
+      assert.strictEqual(phoneOnly.channel, "PHONE");
+      assert.strictEqual(phoneOnly.target, "919829012345");
+    }
+
+    // 3. BOTH Email and Phone provided -> prioritizes EMAIL
+    const both = resolveOtpDestination({
+      email: "owner@jewels.in",
+      phone: "+91 98290 12345",
+    });
+    assert.strictEqual(both.ok, true);
+    if (both.ok) {
+      assert.strictEqual(both.channel, "EMAIL");
+      assert.strictEqual(both.target, "owner@jewels.in");
+      assert.strictEqual(both.cleanPhone, "+91 98290 12345");
+    }
+
+    // 4. Empty -> rejected
+    const missing = resolveOtpDestination({ email: "", phone: "" });
+    assert.strictEqual(missing.ok, false);
   });
 });
