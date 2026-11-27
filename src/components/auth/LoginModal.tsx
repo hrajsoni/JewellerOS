@@ -71,7 +71,7 @@ const AuthPanels: React.FC<{ isGateMode?: boolean }> = ({ isGateMode = false }) 
   const [signupPhone, setSignupPhone] = useState("");
   const [signupPin, setSignupPin] = useState("");
   const [signupRole, setSignupRole] = useState<RoleType>("OWNER");
-  const [signupBusinessName, setSignupBusinessName] = useState("Sandhya Jewellers");
+  const [signupBusinessName, setSignupBusinessName] = useState("");
   const [signupChallenge, setSignupChallenge] = useState<SendOtpResponse | null>(null);
   const [signupOtpCode, setSignupOtpCode] = useState("");
 
@@ -224,8 +224,8 @@ const AuthPanels: React.FC<{ isGateMode?: boolean }> = ({ isGateMode = false }) 
       phone: signupPhone.trim() || undefined,
       pin: signupPin.trim(),
       role: signupRole,
-      businessId: user?.businessId || "tenant-sandhya-jaipur",
-      businessName: signupBusinessName.trim() || "Sandhya Jewellers",
+      businessId: (!isGateMode && isAuthenticated && user?.businessId) ? user.businessId : undefined,
+      businessName: signupBusinessName.trim() || undefined,
       challengeId: signupChallenge.challengeId,
       otp: signupOtpCode.trim(),
     });
@@ -633,7 +633,7 @@ const AuthPanels: React.FC<{ isGateMode?: boolean }> = ({ isGateMode = false }) 
                 />
                 <GlassInput
                   label="Showroom Business Name"
-                  placeholder="Sandhya Jewellers"
+                  placeholder="e.g. Royal Jewellers"
                   value={signupBusinessName}
                   onChange={(e) => setSignupBusinessName(e.target.value)}
                 />

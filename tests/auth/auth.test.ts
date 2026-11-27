@@ -13,6 +13,7 @@ import {
 } from "../../src/modules/auth/store";
 import { ROLE_PERMISSIONS, hasPermission } from "../../src/modules/auth/permissions";
 import { resolveOtpDestination } from "../../src/lib/otpRules";
+import { extractSessionFromRequest, resolveRequestBusinessId } from "../../src/lib/authSessionHelper";
 
 describe("JewelleryOS Milestone 10: Authentication, Unique Salted PINs & Strict RBAC Tests", () => {
   beforeEach(() => {
@@ -229,5 +230,59 @@ describe("JewelleryOS Milestone 10: Authentication, Unique Salted PINs & Strict 
     // 4. Empty -> rejected
     const missing = resolveOtpDestination({ email: "", phone: "" });
     assert.strictEqual(missing.ok, false);
+  });
+
+  it("Session Extraction: Extracts tenant and user from cookie, Bearer header, or custom headers", () => {
+    // 1. From cookie
+    const mockCookieReq = new Request("http://localhost:3000/api/invoices", {
+      headers: {
+        cookie: `jewellery_os_session=${encodeURIComponent(
+          JSON.stringify({ id: "user-123", businessId: "biz_royal_jewellers", role: "OWNER" })
+        )}`,
+      },
+    });
+    const s1 = extractSessionFromRequest(mockCookieReq);
+    assert.ok(s1);
+    assert.strictEqual(s1?.businessId, "biz_royal_jewellers");
+    assert.strictEqual(s1?.role, "OWNER");
+
+    // 2. From Authorization Bearer
+    const mockAuthReq = new Request("http://localhost:3000/api/invoices", {
+      headers: {
+        authorization: `Bearer ${JSON.stringify({ id: "user-456", businessId: "biz_soni_sons", role: "MANAGER" })}`,
+      },
+    });
+    const s2 = extractSessionFromRequest(mockAuthReq);
+    assert.ok(s2);
+    assert.strictEqual(s2?.businessId, "biz_soni_sons");
+    assert.strictEqual(s2?.id, "user-456");
+
+    // 3. From custom header
+    const mockCustomReq = new Request("http://localhost:3000/api/invoices", {
+      headers: {
+        "x-business-id": "biz_header_tenant",
+        "x-user-id": "user-789",
+      },
+    });
+    const s3 = extractSessionFromRequest(mockCustomReq);
+    assert.ok(s3);
+    assert.strictEqual(s3?.businessId, "biz_header_tenant");
+  });
+
+  it("Business Resolution: Resolves businessId from query, body, session, or explicit fallback", async () => {
+    // 1. From query parameter
+    const req1 = new Request("http://localhost:3000/api/stock?tenantId=biz_query_tenant");
+    const b1 = await resolveRequestBusinessId(req1);
+    assert.strictEqual(b1, "biz_query_tenant");
+
+    // 2. From body
+    const req2 = new Request("http://localhost:3000/api/stock", { method: "POST" });
+    const b2 = await resolveRequestBusinessId(req2, { businessId: "biz_body_tenant" });
+    assert.strictEqual(b2, "biz_body_tenant");
+
+    // 3. From explicit fallback
+    const req3 = new Request("http://localhost:3000/api/stock");
+    const b3 = await resolveRequestBusinessId(req3, {}, "biz_fallback_tenant");
+    assert.strictEqual(b3, "biz_fallback_tenant");
   });
 });

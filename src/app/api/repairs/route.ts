@@ -3,11 +3,11 @@ import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { mapDbRepair, mapDbBooking } from "@/lib/prismaMappers";
 import { ensureBusinessRecord } from "@/lib/prismaBusinessHelper";
+import { resolveRequestBusinessId } from "@/lib/authSessionHelper";
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const tenantId = searchParams.get("tenantId") || "tenant-sandhya-jaipur";
+    const tenantId = await resolveRequestBusinessId(request);
 
     const [repairs, bookings] = await Promise.all([
       prisma.repairJob.findMany({ where: { businessId: tenantId }, orderBy: { intakeDate: "desc" } }),
@@ -33,7 +33,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, businessId = "tenant-sandhya-jaipur", payload = {} } = body;
+    const resolvedBusinessId = await resolveRequestBusinessId(request, body);
+    const { action, businessId = resolvedBusinessId, payload = {} } = body;
     await ensureBusinessRecord(businessId);
 
     if (action === "create_booking") {

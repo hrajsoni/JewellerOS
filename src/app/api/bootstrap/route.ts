@@ -24,11 +24,11 @@ import {
   mapDbStaffPayment,
   mapDbSettings,
 } from "@/lib/prismaMappers";
+import { resolveRequestBusinessId } from "@/lib/authSessionHelper";
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const tenantId = searchParams.get("tenantId") || "tenant-sandhya-jaipur";
+    const tenantId = await resolveRequestBusinessId(request);
 
     const [
       businesses,

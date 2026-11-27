@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { resolveRequestBusinessId } from "@/lib/authSessionHelper";
 
 export async function GET(request: Request) {
   try {
+    const tenantId = await resolveRequestBusinessId(request);
     const { searchParams } = new URL(request.url);
-    const tenantId = searchParams.get("tenantId") || "tenant-sandhya-jaipur";
     const status = searchParams.get("status");
     const metal = searchParams.get("metal");
 
@@ -38,8 +39,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const resolvedBusinessId = await resolveRequestBusinessId(request, body);
     const {
-      businessId = "tenant-sandhya-jaipur",
+      businessId = resolvedBusinessId,
       barcode,
       sku,
       title,

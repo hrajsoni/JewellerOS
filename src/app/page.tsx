@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { AuthProvider, useAuth } from "../modules/auth/AuthContext";
 import { LoginModal, AuthGateScreen } from "../components/auth/LoginModal";
+import { ErrorBoundary } from "../components/common/ErrorBoundary";
 import { MetalRatesModal } from "../components/rates/MetalRatesModal";
 import { getLatestMetalRates } from "../modules/rates/store";
 import {
@@ -67,6 +68,7 @@ import { PreloadedCalcData } from "../components/calculator/CounterCalculator";
 import { JewellerTenant, RegisterJewellerInput } from "../modules/tenants/types";
 import {
   getAllTenants,
+  saveAllTenants,
   getActiveTenant,
   setActiveTenantId,
   registerNewTenant,
@@ -407,6 +409,37 @@ function WorkspaceMain() {
     const curr = getActiveTenant();
     loadTenantData(curr);
   }, []);
+
+  // Synchronize active showroom workspace with authenticated user's business
+  useEffect(() => {
+    if (user?.businessId && user.businessId !== activeTenant.id) {
+      let tenants = getAllTenants();
+      let matched = tenants.find((t) => t.id === user.businessId);
+      if (!matched) {
+        matched = {
+          id: user.businessId,
+          businessName: user.businessName || "Showroom Workspace",
+          ownerName: user.fullName || "Showroom Owner",
+          phone: user.phone || "+91 94140 12345",
+          email: user.email || undefined,
+          city: "Jaipur",
+          address: "Showroom Main Market",
+          gstin: "08AAAAJ1234F1Z8",
+          defaultGoldRate: 150000,
+          defaultSilverRate: 95000,
+          defaultMakingPercentage: 18,
+          currency: "INR",
+          createdAt: new Date().toISOString(),
+          isDefault: false,
+        };
+        tenants = [...tenants, matched];
+        saveAllTenants(tenants);
+      }
+      setAllTenants(tenants);
+      setActiveTenantId(matched.id);
+      loadTenantData(matched);
+    }
+  }, [user?.businessId, user?.businessName]);
 
   const handleSelectTenant = (tenantId: string) => {
     setActiveTenantId(tenantId);
@@ -1684,15 +1717,25 @@ function WorkspaceMain() {
 function WorkspaceGate() {
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) {
-    return <AuthGateScreen />;
+    return (
+      <ErrorBoundary fallbackTitle="Showroom Authentication Gate">
+        <AuthGateScreen />
+      </ErrorBoundary>
+    );
   }
-  return <WorkspaceMain />;
+  return (
+    <ErrorBoundary fallbackTitle="Showroom Workspace">
+      <WorkspaceMain />
+    </ErrorBoundary>
+  );
 }
 
 export default function WorkspacePage() {
   return (
-    <AuthProvider>
-      <WorkspaceGate />
-    </AuthProvider>
+    <ErrorBoundary fallbackTitle="JewelleryOS Core Application">
+      <AuthProvider>
+        <WorkspaceGate />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

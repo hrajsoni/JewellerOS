@@ -3,11 +3,11 @@ import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { mapDbCustomer } from "@/lib/prismaMappers";
 import { ensureBusinessRecord, adjustAccountBalance } from "@/lib/prismaBusinessHelper";
+import { resolveRequestBusinessId } from "@/lib/authSessionHelper";
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const tenantId = searchParams.get("tenantId") || "tenant-sandhya-jaipur";
+    const tenantId = await resolveRequestBusinessId(request);
 
     const customers = await prisma.customer.findMany({
       where: { businessId: tenantId },
@@ -31,8 +31,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const resolvedBusinessId = await resolveRequestBusinessId(request, body);
     const {
-      businessId = "tenant-sandhya-jaipur",
+      businessId = resolvedBusinessId,
       name,
       phone,
       email,
@@ -87,8 +88,9 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
+    const resolvedBusinessId = await resolveRequestBusinessId(request, body);
     const {
-      businessId = "tenant-sandhya-jaipur",
+      businessId = resolvedBusinessId,
       customerId,
       customerPhone,
       customerName,

@@ -77,7 +77,7 @@ export async function POST(request: Request) {
         phone: user.phone || "",
         role: user.role,
         businessId: user.businessId,
-        businessName: user.business?.name || "Sandhya Jewellers",
+        businessName: user.business?.name || "Showroom Workspace",
         branchName: "Main Showroom",
       };
 
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
       phone: resolvedUser.phone || "",
       role: resolvedUser.role,
       businessId: resolvedUser.businessId,
-      businessName: resolvedUser.business?.name || "Sandhya Jewellers",
+      businessName: resolvedUser.business?.name || "Showroom Workspace",
       branchName: "Main Showroom",
     };
 

@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { AccountType, Prisma } from "@prisma/client";
+import { AccountType, MetalType, Prisma } from "@prisma/client";
 
 export async function ensureBusinessRecord(businessId: string, name?: string) {
   const existing = await prisma.business.findUnique({ where: { id: businessId } });
@@ -57,6 +57,67 @@ export async function seedDefaultAccountsForBusiness(
       },
     });
   }
+}
+
+export async function seedDefaultRatesForBusiness(
+  tx: Prisma.TransactionClient,
+  businessId: string
+) {
+  const defaultRates = [
+    { metal: MetalType.GOLD, purityKey: "24K", purityPercent: new Prisma.Decimal(1.0), sellingRate: new Prisma.Decimal(150000), purchaseRate: new Prisma.Decimal(145000) },
+    { metal: MetalType.GOLD, purityKey: "22K", purityPercent: new Prisma.Decimal(0.9167), sellingRate: new Prisma.Decimal(137500), purchaseRate: new Prisma.Decimal(132500) },
+    { metal: MetalType.GOLD, purityKey: "18K", purityPercent: new Prisma.Decimal(0.75), sellingRate: new Prisma.Decimal(112500), purchaseRate: new Prisma.Decimal(108000) },
+    { metal: MetalType.GOLD, purityKey: "14K", purityPercent: new Prisma.Decimal(0.5833), sellingRate: new Prisma.Decimal(87500), purchaseRate: new Prisma.Decimal(84000) },
+    { metal: MetalType.SILVER, purityKey: "999", purityPercent: new Prisma.Decimal(0.999), sellingRate: new Prisma.Decimal(95000), purchaseRate: new Prisma.Decimal(90000) },
+    { metal: MetalType.SILVER, purityKey: "925", purityPercent: new Prisma.Decimal(0.925), sellingRate: new Prisma.Decimal(88000), purchaseRate: new Prisma.Decimal(83000) },
+  ];
+
+  for (const rate of defaultRates) {
+    await tx.metalRate.create({
+      data: {
+        businessId,
+        metal: rate.metal,
+        purityKey: rate.purityKey,
+        purityPercent: rate.purityPercent,
+        sellingRate: rate.sellingRate,
+        purchaseRate: rate.purchaseRate,
+        source: "MARKET_DEFAULT",
+        notes: "Baseline market rate seed",
+      },
+    });
+  }
+}
+
+export async function seedDefaultSettingsForBusiness(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  businessName?: string,
+  phone?: string,
+  email?: string
+) {
+  const name = businessName || "Showroom Workspace";
+  await tx.showroomMasterSettings.upsert({
+    where: { businessId },
+    update: {},
+    create: {
+      businessId,
+      showroomName: name,
+      tagline: "Hallmarked Gold & Fine Certified Jewellery",
+      addressLine1: "142 Sarafa Market",
+      city: "Jaipur",
+      state: "Rajasthan",
+      pincode: "302001",
+      stateCode: "08",
+      contactPhones: phone ? [phone] : ["+91 94140 12345"],
+      email: email || "info@jewelleryos.com",
+      gstin: "08AAAAJ1234F1Z8",
+      bisHallmarkLicense: "HM/C-8901234567",
+      invoiceFormat: "A4_DETAILED",
+      defaultTaxRate: new Prisma.Decimal(3.0),
+      thermalPrinterWidth: 50,
+      barcodeTagFormat: "TAG_50x25_BUTTERFLY",
+    },
+  });
 }
 
 export async function adjustAccountBalance(

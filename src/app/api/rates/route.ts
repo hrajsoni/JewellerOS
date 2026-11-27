@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { resolveRequestBusinessId } from "@/lib/authSessionHelper";
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const tenantId = searchParams.get("tenantId") || "tenant-sandhya-jaipur";
+    const tenantId = await resolveRequestBusinessId(request);
 
     const rates = await prisma.metalRate.findMany({
       where: { businessId: tenantId },
@@ -25,8 +25,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const resolvedBusinessId = await resolveRequestBusinessId(request, body);
     const {
-      businessId = "tenant-sandhya-jaipur",
+      businessId = resolvedBusinessId,
       rates = [],
       updatedById,
       source = "MANUAL",

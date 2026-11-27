@@ -205,33 +205,33 @@ export const FinancialOverview: React.FC<FinancialOverviewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <GlassStatCard
               label="Today's Sales Turnover"
-              value={formatINR(totalSalesVolume || 392400)}
+              value={formatINR(totalSalesVolume)}
               subtitle={`${invoiceCount} counter invoices settled`}
-              change={{ value: "+18.2%", isPositive: true }}
+              change={invoiceCount > 0 ? { value: `${invoiceCount} bills`, isPositive: true } : undefined}
               variant="gold"
               icon={<TrendingUp size={18} className="text-[#DFC38A]" />}
             />
             <GlassStatCard
               label="Stock Retail Valuation"
-              value={formatINR(totalEstimatedStockValuation || 4850000)}
-              subtitle={`Acquisition cost: ${formatINR(totalAcquisitionCost || 4100000)}`}
+              value={formatINR(totalEstimatedStockValuation)}
+              subtitle={`Acquisition cost: ${formatINR(totalAcquisitionCost)}`}
               change={{
-                value: `+${formatINR(unrealizedGrossMargin || 750000)} margin`,
-                isPositive: true,
+                value: `+${formatINR(unrealizedGrossMargin)} margin`,
+                isPositive: unrealizedGrossMargin > 0,
               }}
               variant="emerald"
               icon={<Receipt size={18} className="text-[var(--accent-emerald)]" />}
             />
             <GlassStatCard
               label="Physical Gold in Safe"
-              value={formatGrams(totalGoldGrossGrams || 512.45)}
-              subtitle={`Fine 24K Equiv: ${formatGrams(totalGoldFineGrams || 469.4)}`}
+              value={formatGrams(totalGoldGrossGrams)}
+              subtitle={`Fine 24K Equiv: ${formatGrams(totalGoldFineGrams)}`}
               icon={<Coins size={18} className="text-[#DFC38A]" />}
             />
             <GlassStatCard
               label="Liquid Cash & Bank"
-              value={formatINR(liquidCashBank || 625000)}
-              subtitle={`Drawer: ${formatINR(drawerCash || 85000)} · Current: ${formatINR(bankCurrent || 540000)}`}
+              value={formatINR(liquidCashBank)}
+              subtitle={`Drawer: ${formatINR(drawerCash)} · Current: ${formatINR(bankCurrent)}`}
               icon={<Landmark size={18} className="text-[var(--accent-emerald)]" />}
             />
           </div>

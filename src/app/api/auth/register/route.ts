@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
-import { ensureBusinessRecord } from "@/lib/prismaBusinessHelper";
+import {
+  seedDefaultAccountsForBusiness,
+  seedDefaultRatesForBusiness,
+  seedDefaultSettingsForBusiness,
+  ensureBusinessRecord,
+} from "@/lib/prismaBusinessHelper";
 import {
   resolveOtpDestination,
   verifyAndValidateChallenge,
-  normalizePhoneDigits,
   getPhoneSearchVariations,
 } from "@/lib/otpService";
 
@@ -18,7 +23,7 @@ export async function POST(request: Request) {
       phone,
       pin,
       role = "OWNER",
-      businessId = "tenant-sandhya-jaipur",
+      businessId,
       businessName,
       challengeId,
       otp,
@@ -74,12 +79,11 @@ export async function POST(request: Request) {
 
     if (duplicate) {
       return NextResponse.json(
-        { error: "Account already exists for this email or phone number." },
+        { error: "Account already exists for this email or phone number. Please sign in." },
         { status: 409 }
       );
     }
 
-    const business = await ensureBusinessRecord(businessId, businessName || "Sandhya Jewellers");
     const passwordHash = await bcrypt.hash(cleanPin, 8);
 
     const validRoles = [
@@ -91,31 +95,88 @@ export async function POST(request: Request) {
       "INVENTORY_CLERK",
       "KARIGAR_MANAGER",
     ];
-    const safeRole = validRoles.includes(role) ? role : "SALESPERSON";
+    const safeRole = validRoles.includes(role) ? role : "OWNER";
 
-    const created = await prisma.user.create({
-      data: {
-        businessId: business.id,
-        fullName: String(fullName).trim(),
-        email: resolved.cleanEmail || null,
-        phone: resolved.cleanPhone || null,
-        emailVerified: resolved.channel === "EMAIL",
-        phoneVerified: resolved.channel === "PHONE",
-        passwordHash,
-        role: safeRole as any,
-        isActive: true,
-        lastLoginAt: new Date(),
-      },
+    // Dynamic Showroom Workspace Creation vs Joining Existing
+    const targetBusinessId = businessId ? String(businessId).trim() : "";
+    const targetBusinessName = businessName ? String(businessName).trim() : "";
+
+    const userRecord = await prisma.$transaction(async (tx) => {
+      let bizRecord = null;
+      if (targetBusinessId) {
+        bizRecord = await tx.business.findUnique({ where: { id: targetBusinessId } });
+      }
+
+      if (!bizRecord) {
+        // Generate clean dynamic business ID
+        const generatedId = `biz_${Date.now().toString(36)}_${crypto.randomBytes(3).toString("hex")}`;
+        const finalName = targetBusinessName || `${String(fullName).trim()}'s Jewellers`;
+
+        bizRecord = await tx.business.create({
+          data: {
+            id: generatedId,
+            name: finalName,
+            legalEntityName: finalName,
+            phone: resolved.cleanPhone || "+91 94140 12345",
+            email: resolved.cleanEmail || null,
+            address: "Sarafa Market",
+            city: "Jaipur",
+            state: "Rajasthan",
+            pincode: "302001",
+            currency: "INR",
+          },
+        });
+
+        // Create main showroom branch
+        await tx.branch.create({
+          data: {
+            businessId: bizRecord.id,
+            name: "Main Showroom",
+            code: "BR-MAIN",
+            phone: bizRecord.phone,
+            address: bizRecord.address,
+            isMainVault: true,
+          },
+        });
+
+        // Seed default chart of accounts, baseline rates, and master settings
+        await seedDefaultAccountsForBusiness(tx, bizRecord.id);
+        await seedDefaultRatesForBusiness(tx, bizRecord.id);
+        await seedDefaultSettingsForBusiness(
+          tx,
+          bizRecord.id,
+          finalName,
+          bizRecord.phone,
+          bizRecord.email || undefined
+        );
+      }
+
+      const createdUser = await tx.user.create({
+        data: {
+          businessId: bizRecord.id,
+          fullName: String(fullName).trim(),
+          email: resolved.cleanEmail || null,
+          phone: resolved.cleanPhone || null,
+          emailVerified: resolved.channel === "EMAIL",
+          phoneVerified: resolved.channel === "PHONE",
+          passwordHash,
+          role: safeRole as any,
+          isActive: true,
+          lastLoginAt: new Date(),
+        },
+      });
+
+      return { user: createdUser, business: bizRecord };
     });
 
     const session = {
-      id: created.id,
-      fullName: created.fullName,
-      email: created.email || "",
-      phone: created.phone || "",
-      role: created.role,
-      businessId: created.businessId,
-      businessName: business.name,
+      id: userRecord.user.id,
+      fullName: userRecord.user.fullName,
+      email: userRecord.user.email || "",
+      phone: userRecord.user.phone || "",
+      role: userRecord.user.role,
+      businessId: userRecord.business.id,
+      businessName: userRecord.business.name,
       branchName: "Main Showroom",
     };
 

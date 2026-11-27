@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { mapDbSettings } from "@/lib/prismaMappers";
 import { ensureBusinessRecord } from "@/lib/prismaBusinessHelper";
+import { resolveRequestBusinessId } from "@/lib/authSessionHelper";
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const tenantId = searchParams.get("tenantId") || "tenant-sandhya-jaipur";
+    const tenantId = await resolveRequestBusinessId(request);
 
     const settings = await prisma.showroomMasterSettings.findUnique({
       where: { businessId: tenantId },
@@ -27,8 +27,9 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
+    const resolvedTenantId = await resolveRequestBusinessId(request, body);
     const {
-      tenantId = "tenant-sandhya-jaipur",
+      tenantId = resolvedTenantId,
       businessName,
       tagline,
       address,
