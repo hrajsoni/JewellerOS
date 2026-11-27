@@ -20,6 +20,7 @@ import {
   Receipt,
   RotateCcw,
   Lock,
+  Database,
 } from "lucide-react";
 import { AuthProvider, useAuth } from "../modules/auth/AuthContext";
 import { LoginModal } from "../components/auth/LoginModal";
@@ -181,6 +182,7 @@ import {
 import { SettingsManager } from "../components/settings/SettingsManager";
 import { getSavedSettings } from "../modules/settings/store";
 import { ShowroomMasterSettings } from "../modules/settings/types";
+import { neonApi } from "../lib/neonApi";
 
 const RestrictedModuleGuard: React.FC<{
   moduleName: string;
@@ -300,7 +302,22 @@ function WorkspaceMain() {
     getSavedSettings(activeTenant.id)
   );
 
-  // Synchronize Active Tenant Data and Isolated Database
+  const [dbSyncStatus, setDbSyncStatus] = useState<"connecting" | "connected" | "syncing" | "offline">(
+    "connecting"
+  );
+
+  const runDbSync = (operation: Promise<unknown>) => {
+    setDbSyncStatus("syncing");
+    void operation
+      .then((res) => {
+        setDbSyncStatus(res ? "connected" : "offline");
+      })
+      .catch(() => {
+        setDbSyncStatus("offline");
+      });
+  };
+
+  // Synchronize Active Tenant Data and Isolated Database (Cache + Neon PostgreSQL)
   const loadTenantData = (tenant: JewellerTenant) => {
     setActiveTenant(tenant);
     setShopName(tenant.businessName);
@@ -330,6 +347,47 @@ function WorkspaceMain() {
     setBookings(getSavedBookings(tenant.id));
     setShowroomSettings(getSavedSettings(tenant.id));
     setDraftItems([]);
+
+    // Live Neon PostgreSQL Hydration
+    setDbSyncStatus("connecting");
+    void neonApi.bootstrap(tenant.id).then((data) => {
+      if (!data || !data.success) {
+        setDbSyncStatus("offline");
+        return;
+      }
+      setDbSyncStatus("connected");
+      if (data.tenants?.length) setAllTenants(data.tenants);
+      if (data.rates) {
+        setGoldRate(data.rates.gold24k);
+        setSilverRate(data.rates.silver999PerKg);
+      }
+      if (data.accounts?.length) setAccounts(data.accounts);
+      if (data.settings) {
+        setShowroomSettings(data.settings);
+        setShopName(data.settings.businessName);
+        setAddress(data.settings.address);
+        setPhone(data.settings.phone);
+        setGstin(data.settings.gstin);
+      }
+      if (data.stockItems?.length) setStockItems(data.stockItems);
+      if (data.invoices?.length) setInvoices(data.invoices);
+      if (data.customers?.length) setCustomers(data.customers);
+      if (data.expenses?.length) setExpenses(data.expenses);
+      if (data.dailyClosings?.length) setDailyClosings(data.dailyClosings);
+      if (data.girviLoans?.length) setGirviLoans(data.girviLoans);
+      if (data.karigars?.length) setKarigars(data.karigars);
+      if (data.karigarTxns?.length) setKarigarTxns(data.karigarTxns);
+      if (data.jobCards?.length) setJobCards(data.jobCards);
+      if (data.suppliers?.length) setSuppliers(data.suppliers);
+      if (data.purchases?.length) setPurchases(data.purchases);
+      if (data.supplierPayments?.length) setSupplierPayments(data.supplierPayments);
+      if (data.memos?.length) setMemos(data.memos);
+      if (data.b2bPartners?.length) setB2BPartners(data.b2bPartners);
+      if (data.repairs?.length) setRepairs(data.repairs);
+      if (data.bookings?.length) setBookings(data.bookings);
+      if (data.staff?.length) setStaffList(data.staff);
+      if (data.staffPayments?.length) setStaffPayments(data.staffPayments);
+    });
   };
 
   // Load saved tenants and active database on mount
@@ -352,6 +410,7 @@ function WorkspaceMain() {
     const created = registerNewTenant(input);
     const tenants = getAllTenants();
     setAllTenants(tenants);
+    runDbSync(neonApi.registerTenant({ ...input, id: created.id }));
     loadTenantData(created);
   };
 
@@ -437,6 +496,7 @@ function WorkspaceMain() {
     setCustomers(updatedCustomers);
     // Reset draft cart for next customer
     setDraftItems([]);
+    runDbSync(neonApi.persistInvoice(activeTenant.id, finalized, user.id));
   };
 
   const handleQuickCashBill = (applyGst: boolean) => {
@@ -511,6 +571,7 @@ function WorkspaceMain() {
     const updatedCustomers = recordInvoiceToCustomer(newInvoice, activeTenant.id);
     setCustomers(updatedCustomers);
     setDraftItems([]);
+    runDbSync(neonApi.persistInvoice(activeTenant.id, newInvoice, user.id));
   };
 
   const handleBillWithCustomerFromCounter = (
@@ -599,12 +660,14 @@ function WorkspaceMain() {
     const updatedCustomers = recordInvoiceToCustomer(newInvoice, activeTenant.id);
     setCustomers(updatedCustomers);
     setDraftItems([]);
+    runDbSync(neonApi.persistInvoice(activeTenant.id, newInvoice, user.id));
   };
 
   const handleAddStockItem = (newItem: StockItem) => {
     const updated = [newItem, ...stockItems];
     setStockItems(updated);
     saveStockItems(updated, activeTenant.id);
+    runDbSync(neonApi.addStockItem(activeTenant.id, newItem));
   };
 
   const handleLoadStockIntoCalculator = (item: StockItem) => {
@@ -626,20 +689,38 @@ function WorkspaceMain() {
   };
 
   const handleAddCustomer = (input: NewCustomerInput) => {
-    addCustomer(input, activeTenant.id);
+    const created = addCustomer(input, activeTenant.id);
     setCustomers(getSavedCustomers(activeTenant.id));
+    runDbSync(
+      neonApi.addCustomer(activeTenant.id, input).then((res) => {
+        if (res?.customer) {
+          setCustomers((prev) => [res.customer, ...prev.filter((c) => c.id !== created.id)]);
+        }
+        return res;
+      })
+    );
   };
 
   const handleAddGirviLoan = (input: NewGirviInput) => {
-    createGirviLoan(input, activeTenant.id);
+    const created = createGirviLoan(input, activeTenant.id);
     setGirviLoans(getSavedGirviLoans(activeTenant.id));
     setAccounts(getSavedAccounts(activeTenant.id));
+    runDbSync(
+      neonApi.createGirviLoan(activeTenant.id, input).then((res) => {
+        if (res?.loan) {
+          setGirviLoans((prev) => [res.loan, ...prev.filter((l) => l.id !== created.id)]);
+        }
+        return res;
+      })
+    );
   };
 
   const handleReleaseGirviLoan = (loanId: string) => {
+    const target = girviLoans.find((l) => l.id === loanId);
     const updated = releaseGirviLoan(loanId, activeTenant.id);
     setGirviLoans(updated);
     setAccounts(getSavedAccounts(activeTenant.id));
+    runDbSync(neonApi.releaseGirviLoan(activeTenant.id, loanId, target?.loanNumber));
   };
 
   // Karigar Actions
@@ -650,8 +731,16 @@ function WorkspaceMain() {
     specialty: string;
     notes?: string;
   }) => {
-    addKarigar(input, activeTenant.id);
+    const created = addKarigar(input, activeTenant.id);
     setKarigars(getSavedKarigars(activeTenant.id));
+    runDbSync(
+      neonApi.karigarAction(activeTenant.id, "add_karigar", input).then((res) => {
+        if (res?.karigar) {
+          setKarigars((prev) => [res.karigar, ...prev.filter((k) => k.id !== created.id)]);
+        }
+        return res;
+      })
+    );
   };
 
   const handleIssueMetalToKarigar = (input: IssueMetalInput) => {
@@ -659,6 +748,7 @@ function WorkspaceMain() {
     setKarigars(getSavedKarigars(activeTenant.id));
     setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
     setStockItems(getSavedStock(activeTenant.id));
+    runDbSync(neonApi.karigarAction(activeTenant.id, "issue_metal", input));
   };
 
   const handleReceiveOrnamentFromKarigar = (input: ReceiveOrnamentInput) => {
@@ -666,6 +756,7 @@ function WorkspaceMain() {
     setKarigars(getSavedKarigars(activeTenant.id));
     setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
     setStockItems(getSavedStock(activeTenant.id));
+    runDbSync(neonApi.karigarAction(activeTenant.id, "receive_ornament", input));
   };
 
   const handlePayLabourToKarigar = (input: PayLabourInput) => {
@@ -673,19 +764,29 @@ function WorkspaceMain() {
     setKarigars(getSavedKarigars(activeTenant.id));
     setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
     setAccounts(getSavedAccounts(activeTenant.id));
+    runDbSync(neonApi.karigarAction(activeTenant.id, "pay_labour", input));
   };
 
   const handleCreateJobCard = (input: CreateJobCardInput) => {
-    createJobCard(input, activeTenant.id);
+    const created = createJobCard(input, activeTenant.id);
     setJobCards(getSavedJobCards(activeTenant.id));
     setKarigars(getSavedKarigars(activeTenant.id));
     setKarigarTxns(getSavedKarigarTxns(activeTenant.id));
     setStockItems(getSavedStock(activeTenant.id));
+    runDbSync(
+      neonApi.karigarAction(activeTenant.id, "create_job_card", input).then((res) => {
+        if (res?.jobCard) {
+          setJobCards((prev) => [res.jobCard, ...prev.filter((j) => j.id !== created.id)]);
+        }
+        return res;
+      })
+    );
   };
 
   const handleUpdateJobCardStatus = (jobCardId: string, status: JobCardStatus, huid?: string) => {
     updateJobCardStatus(jobCardId, status, huid, activeTenant.id);
     setJobCards(getSavedJobCards(activeTenant.id));
+    runDbSync(neonApi.updateJobCardStatus(jobCardId, status, huid));
   };
 
   // Accounts Actions
@@ -693,30 +794,42 @@ function WorkspaceMain() {
     recordExpense(input, activeTenant.id);
     setExpenses(getSavedExpenses(activeTenant.id));
     setAccounts(getSavedAccounts(activeTenant.id));
+    runDbSync(neonApi.recordExpense(activeTenant.id, input));
   };
 
   const handleRecordClosing = (input: RecordCashClosingInput) => {
     recordDailyCashClosing(input, activeTenant.id);
     setDailyClosings(getSavedDailyClosings(activeTenant.id));
     setAccounts(getSavedAccounts(activeTenant.id));
+    runDbSync(neonApi.recordClosing(activeTenant.id, input));
   };
 
   // Staff Actions
   const handleAddStaffMember = (input: AddStaffInput) => {
-    addStaffMember(input, activeTenant.id);
+    const created = addStaffMember(input, activeTenant.id);
     setStaffList(getSavedStaff(activeTenant.id));
+    runDbSync(
+      neonApi.staffAction(activeTenant.id, "add_staff", input).then((res) => {
+        if (res?.staff) {
+          setStaffList((prev) => [res.staff, ...prev.filter((s) => s.id !== created.id)]);
+        }
+        return res;
+      })
+    );
   };
 
   const handleIssueStaffAdvance = (input: IssueAdvanceInput) => {
     issueStaffAdvance(input, activeTenant.id);
     setStaffList(getSavedStaff(activeTenant.id));
     setStaffPayments(getSavedStaffPayments(activeTenant.id));
+    runDbSync(neonApi.staffAction(activeTenant.id, "issue_advance", input));
   };
 
   const handlePayStaffSalary = (input: PaySalaryInput) => {
     payStaffSalary(input, activeTenant.id);
     setStaffList(getSavedStaff(activeTenant.id));
     setStaffPayments(getSavedStaffPayments(activeTenant.id));
+    runDbSync(neonApi.staffAction(activeTenant.id, "pay_salary", input));
   };
 
   // Supplier & Purchase Actions
@@ -726,11 +839,20 @@ function WorkspaceMain() {
     setStockItems(result.updatedStock);
     setSuppliers(result.updatedSuppliers);
     setAccounts(getSavedAccounts(activeTenant.id));
+    runDbSync(neonApi.recordPurchase(activeTenant.id, invoiceInput));
   };
 
   const handleAddSupplier = (input: NewSupplierInput) => {
-    addSupplier(input, activeTenant.id);
+    const created = addSupplier(input, activeTenant.id);
     setSuppliers(getSavedSuppliers(activeTenant.id));
+    runDbSync(
+      neonApi.addSupplier(activeTenant.id, input).then((res) => {
+        if (res?.supplier) {
+          setSuppliers((prev) => [res.supplier, ...prev.filter((s) => s.id !== created.id)]);
+        }
+        return res;
+      })
+    );
   };
 
   const handlePaySupplier = (payment: Omit<SupplierPaymentRecord, "id" | "date">) => {
@@ -738,19 +860,29 @@ function WorkspaceMain() {
     setSupplierPayments([result.paymentRecord, ...supplierPayments]);
     setSuppliers(result.updatedSuppliers);
     setAccounts(getSavedAccounts(activeTenant.id));
+    runDbSync(neonApi.recordSupplierPayment(activeTenant.id, payment));
   };
 
   // Wholesale Consignment Memo Actions (जांगड़ / कच्चा पर्चा)
   const handleIssueMemo = (input: CreateConsignmentMemoInput) => {
-    createConsignmentMemo(input, activeTenant.id);
+    const created = createConsignmentMemo(input, activeTenant.id);
     setMemos(getSavedMemos(activeTenant.id));
     setStockItems(getSavedStock(activeTenant.id));
+    runDbSync(
+      neonApi.wholesaleAction(activeTenant.id, "issue_memo", input).then((res) => {
+        if (res?.memo) {
+          setMemos((prev) => [res.memo, ...prev.filter((m) => m.id !== created.id)]);
+        }
+        return res;
+      })
+    );
   };
 
   const handleReturnMemoItems = (memoId: string, itemIds: string[]) => {
     returnMemoItems(memoId, itemIds, activeTenant.id);
     setMemos(getSavedMemos(activeTenant.id));
     setStockItems(getSavedStock(activeTenant.id));
+    runDbSync(neonApi.updateMemoStatus("return", memoId, itemIds));
   };
 
   const handleConvertMemoToInvoice = (memoId: string, itemIds: string[], invoiceNum: string) => {
@@ -759,6 +891,7 @@ function WorkspaceMain() {
     setStockItems(getSavedStock(activeTenant.id));
     setInvoices(getSavedInvoices(activeTenant.id));
     setAccounts(getSavedAccounts(activeTenant.id));
+    runDbSync(neonApi.updateMemoStatus("convert", memoId, itemIds, invoiceNum));
   };
 
   const handleAddB2BPartner = (partner: Omit<B2BPartnerProfile, "id" | "totalMemoCount" | "activeMemoValue" | "totalPurchasedValue">) => {
@@ -772,27 +905,46 @@ function WorkspaceMain() {
     const updated = [newPartner, ...b2bPartners];
     saveB2BPartners(updated, activeTenant.id);
     setB2BPartners(updated);
+    runDbSync(neonApi.wholesaleAction(activeTenant.id, "add_partner", partner));
   };
 
   // Customer Repairs & Custom Orders Actions
   const handleCreateRepair = (input: CreateRepairInput) => {
-    createRepairJob(input, activeTenant.id);
+    const created = createRepairJob(input, activeTenant.id);
     setRepairs(getSavedRepairs(activeTenant.id));
+    runDbSync(
+      neonApi.createRepair(activeTenant.id, input).then((res) => {
+        if (res?.repair) {
+          setRepairs((prev) => [res.repair, ...prev.filter((r) => r.id !== created.id)]);
+        }
+        return res;
+      })
+    );
   };
 
   const handleUpdateRepairStatus = (input: UpdateRepairStatusInput) => {
     updateRepairStatus(input, activeTenant.id);
     setRepairs(getSavedRepairs(activeTenant.id));
+    runDbSync(neonApi.updateRepairStatus(input));
   };
 
   const handleCreateBooking = (input: CreateBookingInput) => {
-    createBookingOrder(input, activeTenant.id);
+    const created = createBookingOrder(input, activeTenant.id);
     setBookings(getSavedBookings(activeTenant.id));
+    runDbSync(
+      neonApi.createBooking(activeTenant.id, input).then((res) => {
+        if (res?.booking) {
+          setBookings((prev) => [res.booking, ...prev.filter((b) => b.id !== created.id)]);
+        }
+        return res;
+      })
+    );
   };
 
   const handleUpdateBookingStatus = (bookingId: string, status: BookingStatus) => {
     updateBookingStatus(bookingId, status, activeTenant.id);
     setBookings(getSavedBookings(activeTenant.id));
+    runDbSync(neonApi.updateBookingStatus(bookingId, status));
   };
 
   const handleStartBillForCustomer = (cust: Customer) => {
@@ -1056,11 +1208,22 @@ function WorkspaceMain() {
                 const updated = [...newItems, ...stockItems];
                 setStockItems(updated);
                 saveStockItems(updated, activeTenant.id);
+                newItems.forEach((it) => runDbSync(neonApi.addStockItem(activeTenant.id, it)));
               }}
               onUpdateStockItemStatus={(stockItemId, newStatus, reason, newLocation) => {
+                const matched = stockItems.find((s) => s.id === stockItemId);
                 const res = updateStockItemStatus(stockItemId, newStatus, reason, user, newLocation, activeTenant.id);
                 if (res) {
                   setStockItems(res.updatedItems);
+                  runDbSync(
+                    neonApi.updateStockStatus(
+                      stockItemId,
+                      matched?.barcode || "",
+                      newStatus,
+                      newLocation,
+                      reason
+                    )
+                  );
                 }
               }}
               onLoadIntoCalculator={handleLoadStockIntoCalculator}
@@ -1263,6 +1426,18 @@ function WorkspaceMain() {
                     defaultSilverRate: updated.defaultSilverRateKg,
                   });
                   setAllTenants(getAllTenants());
+                  runDbSync(neonApi.updateSettings(updated));
+                  runDbSync(
+                    neonApi.updateTenant({
+                      id: activeTenant.id,
+                      businessName: updated.businessName,
+                      address: updated.address,
+                      phone: updated.phone,
+                      gstin: updated.gstin,
+                      defaultGoldRate: updated.defaultGoldRate24k,
+                      defaultSilverRate: updated.defaultSilverRateKg,
+                    })
+                  );
                 }}
                 onRestoreCompleted={() => loadTenantData(activeTenant)}
               />
@@ -1286,11 +1461,31 @@ function WorkspaceMain() {
               <span>Bespoke Indian Fine Jewellery Retail OS</span>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span>Engineered by</span>
-              <span className="font-semibold text-[var(--text-secondary)]">
-                Harshit Raj
+            <div className="flex items-center gap-3">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
+                  dbSyncStatus === "connected"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : dbSyncStatus === "syncing" || dbSyncStatus === "connecting"
+                    ? "bg-[#C5A059]/10 text-[#C5A059] border-[#C5A059]/20"
+                    : "bg-white/[0.04] text-[var(--text-tertiary)] border-white/[0.08]"
+                }`}
+              >
+                <Database className="w-3 h-3" />
+                {dbSyncStatus === "connected"
+                  ? "Neon PostgreSQL Live"
+                  : dbSyncStatus === "syncing"
+                  ? "Syncing to Neon..."
+                  : dbSyncStatus === "connecting"
+                  ? "Connecting Neon..."
+                  : "Local Cache Mode"}
               </span>
+              <div className="flex items-center gap-1.5">
+                <span>Engineered by</span>
+                <span className="font-semibold text-[var(--text-secondary)]">
+                  Harshit Raj
+                </span>
+              </div>
             </div>
           </div>
         </footer>
@@ -1323,6 +1518,7 @@ function WorkspaceMain() {
         onRatesUpdated={(record) => {
           setGoldRate(record.gold24k);
           setSilverRate(record.silver999PerKg);
+          runDbSync(neonApi.persistRates(activeTenant.id, record, user?.id));
         }}
       />
     </div>

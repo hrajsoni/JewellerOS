@@ -43,15 +43,95 @@ export async function GET(request: Request) {
   }
 }
 
+import { mapDbExpense, mapDbClosing } from "@/lib/prismaMappers";
+import { ensureBusinessRecord, adjustAccountBalance } from "@/lib/prismaBusinessHelper";
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const {
+      action,
       businessId = "tenant-sandhya-jaipur",
       voucherNumber,
       description,
       lines = [],
+      payload = {},
     } = body;
+
+    await ensureBusinessRecord(businessId);
+
+    if (action === "record_expense") {
+      const amount = Number(payload.amount || 0);
+      const expense = await prisma.$transaction(async (tx) => {
+        const created = await tx.shopExpense.create({
+          data: {
+            businessId,
+            category: payload.category || "Misc",
+            amount: new Prisma.Decimal(amount),
+            paymentMode: payload.paymentMode || "Cash",
+            paidTo: payload.paidTo || "Vendor",
+            voucherNumber: payload.voucherNumber || `EXP-${Date.now()}`,
+            notes: payload.notes || undefined,
+            recordedBy: payload.recordedBy || "Staff",
+          },
+        });
+        const acct = String(payload.paymentMode || "Cash").toLowerCase().includes("bank")
+          ? "1020"
+          : String(payload.paymentMode || "Cash").toLowerCase().includes("upi")
+          ? "1030"
+          : "1010";
+        await adjustAccountBalance(tx, businessId, acct, -amount);
+        await adjustAccountBalance(tx, businessId, "4010", amount);
+        return created;
+      });
+      return NextResponse.json({ success: true, expense: mapDbExpense(expense) }, { status: 201 });
+    }
+
+    if (action === "record_closing") {
+      const closing = await prisma.$transaction(async (tx) => {
+        const upserted = await tx.dailyCashClosing.upsert({
+          where: { businessId_date: { businessId, date: payload.date } },
+          update: {
+            openingCash: new Prisma.Decimal(payload.openingCash || 0),
+            cashSales: new Prisma.Decimal(payload.cashSales || 0),
+            cashAdvances: new Prisma.Decimal(payload.cashAdvances || 0),
+            supplierCashPaid: new Prisma.Decimal(payload.supplierCashPaid || 0),
+            karigarCashPaid: new Prisma.Decimal(payload.karigarCashPaid || 0),
+            cashExpenses: new Prisma.Decimal(payload.cashExpenses || 0),
+            expectedCash: new Prisma.Decimal(payload.expectedCash || 0),
+            physicalCash: new Prisma.Decimal(payload.physicalCash || 0),
+            discrepancy: new Prisma.Decimal(payload.discrepancy || 0),
+            status: payload.status || "tallied",
+            denominations: payload.denominations || {},
+            closedBy: payload.closedBy || "Owner",
+            notes: payload.notes || undefined,
+          },
+          create: {
+            businessId,
+            date: payload.date,
+            openingCash: new Prisma.Decimal(payload.openingCash || 0),
+            cashSales: new Prisma.Decimal(payload.cashSales || 0),
+            cashAdvances: new Prisma.Decimal(payload.cashAdvances || 0),
+            supplierCashPaid: new Prisma.Decimal(payload.supplierCashPaid || 0),
+            karigarCashPaid: new Prisma.Decimal(payload.karigarCashPaid || 0),
+            cashExpenses: new Prisma.Decimal(payload.cashExpenses || 0),
+            expectedCash: new Prisma.Decimal(payload.expectedCash || 0),
+            physicalCash: new Prisma.Decimal(payload.physicalCash || 0),
+            discrepancy: new Prisma.Decimal(payload.discrepancy || 0),
+            status: payload.status || "tallied",
+            denominations: payload.denominations || {},
+            closedBy: payload.closedBy || "Owner",
+            notes: payload.notes || undefined,
+          },
+        });
+        await tx.account.updateMany({
+          where: { businessId, code: "1010" },
+          data: { currentBalance: new Prisma.Decimal(payload.physicalCash || 0) },
+        });
+        return upserted;
+      });
+      return NextResponse.json({ success: true, closing: mapDbClosing(closing) }, { status: 201 });
+    }
 
     if (!voucherNumber || !description || !Array.isArray(lines) || lines.length < 2) {
       return NextResponse.json(

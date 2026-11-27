@@ -66,6 +66,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const normalizedMetal = String(metal || "GOLD").toUpperCase() === "SILVER" ? "SILVER" : "GOLD";
+    const normalizedMaking =
+      String(makingType).toLowerCase() === "per_gram"
+        ? "PER_GRAM"
+        : String(makingType).toLowerCase() === "fixed"
+        ? "FIXED"
+        : "PERCENTAGE";
+
     const created = await prisma.$transaction(async (tx) => {
       // Find or create category product
       let product = await tx.product.findFirst({
@@ -78,31 +86,36 @@ export async function POST(request: Request) {
             businessId,
             name: title,
             category,
-            metal: metal as any,
+            metal: normalizedMetal as any,
             defaultPurity: purityKey,
             hsnCode: "7113",
             standardMaking: new Prisma.Decimal(makingValue),
-            makingType: makingType as any,
+            makingType: normalizedMaking as any,
           },
         });
       }
 
       // Create StockItem
-      const stock = await tx.stockItem.create({
-        data: {
+      const stock = await tx.stockItem.upsert({
+        where: { barcode },
+        update: {
+          status: "IN_SHOWCASE",
+          trayLocation,
+        },
+        create: {
           businessId,
           productId: product.id,
           barcode,
           sku,
           title,
-          metal: metal as any,
+          metal: normalizedMetal as any,
           purityKey,
           grossWeight: new Prisma.Decimal(grossWeight),
           stoneWeight: new Prisma.Decimal(stoneWeight),
           otherDeductions: new Prisma.Decimal(otherDeductions),
           netWeight: new Prisma.Decimal(netWeight),
           fineGoldEq: new Prisma.Decimal(fineGoldEq || netWeight),
-          makingType: makingType as any,
+          makingType: normalizedMaking as any,
           makingValue: new Prisma.Decimal(makingValue),
           acquisitionCost: new Prisma.Decimal(acquisitionCost),
           trayLocation,
@@ -132,6 +145,58 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: "Failed to inward stock item.", details: String(error) },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { stockItemId, barcode, status, trayLocation, reason = "Status updated" } = body;
+
+    if (!stockItemId && !barcode) {
+      return NextResponse.json({ error: "stockItemId or barcode required" }, { status: 400 });
+    }
+
+    const existing = stockItemId
+      ? await prisma.stockItem.findUnique({ where: { id: stockItemId } })
+      : await prisma.stockItem.findUnique({ where: { barcode } });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Stock item not found" }, { status: 404 });
+    }
+
+    const targetStatus = String(status || "IN_SHOWCASE").toUpperCase();
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const item = await tx.stockItem.update({
+        where: { id: existing.id },
+        data: {
+          status: targetStatus as any,
+          ...(trayLocation ? { trayLocation } : {}),
+        },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          stockItemId: existing.id,
+          fromStatus: existing.status,
+          toStatus: targetStatus as any,
+          fromLocation: existing.trayLocation || "SHOWCASE",
+          toLocation: trayLocation || existing.trayLocation || "SHOWCASE",
+          reason,
+          referenceType: "MANUAL_STATUS_CHANGE",
+        },
+      });
+
+      return item;
+    });
+
+    return NextResponse.json({ success: true, item: updated });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to update stock status.", details: String(error) },
       { status: 500 }
     );
   }

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useCallback } from "react";
 import { UserSession, RoleType, PermissionKey, LoginCredentials, UserProfile } from "./types";
+import { neonApi } from "../../lib/neonApi";
 import {
   getCurrentSession,
   switchActiveUser,
@@ -67,6 +68,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(result.session);
       refreshUsers(result.session.businessId);
       setIsLoginModalOpen(false);
+      // Persist & verify session cookie on Neon PostgreSQL server route
+      void neonApi.login(credentials.emailOrPhone, credentials.pinOrPassword, result.session.businessId);
       return { success: true };
     }
     return { success: false, error: result.error || "Login failed" };
