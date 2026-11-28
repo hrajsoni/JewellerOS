@@ -54,6 +54,9 @@ model Business {
   staffPayments          StaffPayment[]
   showroomMasterSettings ShowroomMasterSettings?
   mediaAssets            MediaAsset[]
+  subscriptions          BusinessSubscription[]
+  entitlementOverrides   EntitlementOverride[]
+  usageCounters          UsageCounter[]
 
   @@map("businesses")
 }
@@ -1057,4 +1060,258 @@ model AuditLog {
 
   @@index([timestamp(sort: Desc)])
   @@map("audit_logs")
+}
+
+// ==========================================
+// 14. SAAS SUBSCRIPTIONS, PLANS & ENTITLEMENTS
+// ==========================================
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  PAUSED
+  CANCELLED
+  EXPIRED
+  SUSPENDED
+}
+
+enum BillingInterval {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  LIFETIME
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+model PlatformAdmin {
+  id           String             @id @default(cuid())
+  email        String             @unique @db.VarChar(150)
+  name         String             @db.VarChar(100)
+  passwordHash String             @db.VarChar(255)
+  role         String             @default("SUPER_ADMIN") @db.VarChar(50) // SUPER_ADMIN, SUPPORT, BILLING_OPS
+  isActive     Boolean            @default(true)
+  lastLoginAt  DateTime?          @db.Timestamptz
+  createdAt    DateTime           @default(now()) @db.Timestamptz
+  updatedAt    DateTime           @updatedAt @db.Timestamptz
+
+  auditLogs    PlatformAuditLog[]
+
+  @@map("platform_admins")
+}
+
+model Plan {
+  id             String                 @id @default(cuid())
+  name           String                 @unique @db.VarChar(100)
+  slug           String                 @unique @db.VarChar(50) // trial, starter, growth, enterprise
+  description    String?                @db.Text
+  badge          String?                @db.VarChar(50) // "Most Popular", "Best Value"
+  monthlyPrice   Decimal                @db.Decimal(12, 2)
+  quarterlyPrice Decimal?               @db.Decimal(12, 2)
+  yearlyPrice    Decimal?               @db.Decimal(12, 2)
+  currency       String                 @default("INR") @db.VarChar(5)
+  isPublished    Boolean                @default(false)
+  isArchived     Boolean                @default(false)
+  trialDays      Int                    @default(14)
+  sortOrder      Int                    @default(0)
+  createdAt      DateTime               @default(now()) @db.Timestamptz
+  updatedAt      DateTime               @updatedAt @db.Timestamptz
+
+  entitlements   PlanEntitlement[]
+  subscriptions  BusinessSubscription[]
+  promoCodes     PromoCodePlan[]
+
+  @@map("plans")
+}
+
+model PlanEntitlement {
+  id         String   @id @default(cuid())
+  planId     String
+  featureKey String   @db.VarChar(100)
+  enabled    Boolean  @default(true)
+  limitValue Int?     // null = unlimited
+  unit       String?  @db.VarChar(30) // count, mb, per_month
+
+  plan       Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, featureKey])
+  @@map("plan_entitlements")
+}
+
+model BusinessSubscription {
+  id                 String                @id @default(cuid())
+  businessId         String
+  planId             String
+  status             SubscriptionStatus    @default(TRIALING)
+  billingInterval    BillingInterval       @default(MONTHLY)
+  agreedPrice        Decimal               @db.Decimal(12, 2)
+  currency           String                @default("INR") @db.VarChar(5)
+  startedAt          DateTime              @default(now()) @db.Timestamptz
+  trialEndsAt        DateTime?             @db.Timestamptz
+  currentPeriodStart DateTime?             @db.Timestamptz
+  currentPeriodEnd   DateTime?             @db.Timestamptz
+  graceEndsAt        DateTime?             @db.Timestamptz
+  cancelAtPeriodEnd  Boolean               @default(false)
+  cancelledAt        DateTime?             @db.Timestamptz
+  notes              String?               @db.Text
+  createdAt          DateTime              @default(now()) @db.Timestamptz
+  updatedAt          DateTime              @updatedAt @db.Timestamptz
+
+  business           Business              @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  plan               Plan                  @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments           SubscriptionPayment[]
+  addons             SubscriptionAddon[]
+  events             SubscriptionEvent[]
+
+  @@index([businessId, status])
+  @@index([status, currentPeriodEnd])
+  @@map("business_subscriptions")
+}
+
+model SubscriptionPayment {
+  id                String               @id @default(cuid())
+  subscriptionId    String
+  invoiceNumber     String?              @unique @db.VarChar(50)
+  amount            Decimal              @db.Decimal(12, 2)
+  discountAmount    Decimal              @default(0) @db.Decimal(12, 2)
+  taxAmount         Decimal              @default(0) @db.Decimal(12, 2)
+  netPaid           Decimal              @db.Decimal(12, 2)
+  currency          String               @default("INR") @db.VarChar(5)
+  paymentMethod     String               @db.VarChar(50) // UPI, NEFT_RTGS, CARD, CASH, GATEWAY_RAZORPAY
+  gateway           String?              @db.VarChar(50)
+  gatewayOrderId    String?              @unique @db.VarChar(100)
+  gatewayPaymentId  String?              @unique @db.VarChar(100)
+  promoCodeId       String?
+  status            String               @default("COMPLETED") @db.VarChar(30)
+  notes             String?              @db.Text
+  verifiedByAdminId String?
+  paidAt            DateTime?            @db.Timestamptz
+  createdAt         DateTime             @default(now()) @db.Timestamptz
+
+  subscription      BusinessSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  promoCode         PromoCode?           @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+
+  @@index([subscriptionId])
+  @@map("subscription_payments")
+}
+
+model SubscriptionAddon {
+  id             String               @id @default(cuid())
+  subscriptionId String
+  addonType      String               @db.VarChar(50) // EXTRA_STAFF, EXTRA_BRANCH, EXTRA_STORAGE, SMS_PACK
+  quantity       Int                  @default(1)
+  pricePerUnit   Decimal              @db.Decimal(12, 2)
+  totalPrice     Decimal              @db.Decimal(12, 2)
+  activatedAt    DateTime             @default(now()) @db.Timestamptz
+
+  subscription   BusinessSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@map("subscription_addons")
+}
+
+model PromoCode {
+  id            String                @id @default(cuid())
+  code          String                @unique @db.VarChar(50)
+  description   String?               @db.Text
+  discountType  DiscountType          @default(PERCENTAGE)
+  discountValue Decimal               @db.Decimal(10, 2)
+  maxDiscount   Decimal?              @db.Decimal(10, 2)
+  minOrderValue Decimal?              @db.Decimal(10, 2)
+  maxUses       Int?                  // null = unlimited
+  usedCount     Int                   @default(0)
+  validFrom     DateTime              @default(now()) @db.Timestamptz
+  validUntil    DateTime?             @db.Timestamptz
+  isActive      Boolean               @default(true)
+  createdById   String?
+  createdAt     DateTime              @default(now()) @db.Timestamptz
+  updatedAt     DateTime              @updatedAt @db.Timestamptz
+
+  applicablePlans PromoCodePlan[]
+  payments        SubscriptionPayment[]
+
+  @@index([code, isActive])
+  @@map("promo_codes")
+}
+
+model PromoCodePlan {
+  id          String    @id @default(cuid())
+  promoCodeId String
+  planId      String
+
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  plan        Plan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, planId])
+  @@map("promo_code_plans")
+}
+
+model EntitlementOverride {
+  id          String    @id @default(cuid())
+  businessId  String
+  featureKey  String    @db.VarChar(100)
+  enabled     Boolean?
+  limitValue  Int?
+  reason      String    @db.VarChar(255)
+  grantedById String?
+  expiresAt   DateTime? @db.Timestamptz
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, featureKey])
+  @@map("entitlement_overrides")
+}
+
+model UsageCounter {
+  id          String   @id @default(cuid())
+  businessId  String
+  metricKey   String   @db.VarChar(100)
+  periodStart DateTime @db.Timestamptz
+  periodEnd   DateTime @db.Timestamptz
+  quantity    Int      @default(0)
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, metricKey, periodStart])
+  @@index([businessId, metricKey])
+  @@map("usage_counters")
+}
+
+model SubscriptionEvent {
+  id             String               @id @default(cuid())
+  subscriptionId String
+  eventType      String               @db.VarChar(50) // CREATED, UPGRADED, DOWNGRADED, RENEWED, TRIAL_EXTENDED, SUSPENDED, REACTIVATED, CANCELLED
+  previousPlanId String?              @db.VarChar(50)
+  newPlanId      String?              @db.VarChar(50)
+  actorType      String               @db.VarChar(30)
+  actorId        String?              @db.VarChar(100)
+  details        Json?
+  createdAt      DateTime             @default(now()) @db.Timestamptz
+
+  subscription   BusinessSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, createdAt(sort: Desc)])
+  @@map("subscription_events")
+}
+
+model PlatformAuditLog {
+  id          String         @id @default(cuid())
+  adminId     String?
+  action      String         @db.VarChar(100)
+  targetType  String         @db.VarChar(50)
+  targetId    String         @db.VarChar(100)
+  details     Json?
+  ipAddress   String?        @db.VarChar(50)
+  createdAt   DateTime       @default(now()) @db.Timestamptz
+
+  admin       PlatformAdmin? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt(sort: Desc)])
+  @@map("platform_audit_logs")
 }

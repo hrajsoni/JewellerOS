@@ -46,9 +46,11 @@ import {
   RefreshCw,
   Server,
   Globe,
+  Sparkles,
 } from "lucide-react";
+import { SubscriptionBillingManager } from "./SubscriptionBillingManager";
 
-export type SettingsTab = "profile" | "invoice" | "barcode" | "branches" | "backup";
+export type SettingsTab = "profile" | "invoice" | "barcode" | "branches" | "backup" | "subscription";
 
 export interface SettingsManagerProps {
   initialSettings: ShowroomMasterSettings;
@@ -191,6 +193,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
           { key: "barcode", label: "Barcode Tag Labels", icon: Barcode },
           { key: "branches", label: "Multi-Branch & Vaults", icon: Building2 },
           { key: "backup", label: "Data Vault & Backup", icon: Database },
+          { key: "subscription", label: "JewelBill Plan & Billing", icon: Sparkles },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -907,6 +910,11 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* Subscription & Billing Tab */}
+      {activeTab === "subscription" && (
+        <SubscriptionBillingManager tenantId={tenantId} />
       )}
     </div>
   );

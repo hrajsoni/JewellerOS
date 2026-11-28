@@ -1,5 +1,6 @@
 import { PrismaClient, AccountType, MetalType, RoleType, MakingType, StockStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { seedSaasPlatform } from "../src/lib/seedPlans";
 
 const prisma = new PrismaClient();
 
@@ -332,6 +333,8 @@ async function main() {
       huid: "AB916C",
     },
   });
+
+  await seedSaasPlatform(prisma);
 
   console.log("Database seed completed successfully!");
 }

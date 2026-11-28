@@ -13,6 +13,7 @@ import {
   verifyAndValidateChallenge,
   getPhoneSearchVariations,
 } from "@/lib/otpService";
+import { executeAndPropagateEvent } from "@/lib/events/propagationEngine";
 
 export async function POST(request: Request) {
   try {
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
       businessName,
       challengeId,
       otp,
+      planSlug = "trial",
     } = body;
 
     if (!fullName || !String(fullName).trim()) {
@@ -149,6 +151,48 @@ export async function POST(request: Request) {
           bizRecord.phone,
           bizRecord.email || undefined
         );
+
+        // Assign initial SaaS subscription (Free Trial by default or selected tier)
+        const selectedPlan = await tx.plan.findFirst({
+          where: { slug: String(planSlug).trim().toLowerCase() },
+        }) || await tx.plan.findFirst({ where: { slug: "trial" } });
+
+        if (selectedPlan) {
+          const now = new Date();
+          const trialEnds = new Date(now.getTime() + (selectedPlan.trialDays || 14) * 24 * 60 * 60 * 1000);
+
+          const subscription = await tx.businessSubscription.create({
+            data: {
+              businessId: bizRecord.id,
+              planId: selectedPlan.id,
+              status: selectedPlan.slug === "trial" ? "TRIALING" : "ACTIVE",
+              billingInterval: "MONTHLY",
+              agreedPrice: selectedPlan.monthlyPrice,
+              startedAt: now,
+              trialEndsAt: selectedPlan.slug === "trial" ? trialEnds : null,
+              notes: `Initial registration subscription: ${selectedPlan.name}`,
+            },
+          });
+
+          await executeAndPropagateEvent(
+            {
+              eventType: "REGISTRATION_COMPLETED",
+              businessId: bizRecord.id,
+              aggregateType: "Business",
+              aggregateId: bizRecord.id,
+              idempotencyKey: `reg_${bizRecord.id}_${now.getTime()}`,
+              payload: {
+                businessName: finalName,
+                ownerName: fullName,
+                planId: selectedPlan.id,
+                planName: selectedPlan.name,
+                subscriptionId: subscription.id,
+                trialEndsAt: trialEnds.toISOString(),
+              },
+            },
+            tx
+          );
+        }
       }
 
       const createdUser = await tx.user.create({
